@@ -9,7 +9,7 @@ It can be installed with `pip install PyIBIS-AMI` or via `conda`.  Due to the tr
 
 ## AMI Config
 
-```
+```shell
 ami_config -h
 Usage: ami_config [OPTIONS] PY_FILE
 
@@ -23,7 +23,7 @@ Options:
 
 ## Run Tests
 
-```
+```shell
 run_tests -h
 Usage: run_tests [OPTIONS] [TESTS]...
 
