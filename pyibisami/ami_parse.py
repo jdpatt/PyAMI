@@ -7,6 +7,7 @@ Original date:   December 17, 2016
 
 Copyright (c) 2019 David Banas; all rights reserved World wide.
 """
+import logging
 import re
 
 from parsec import ParseError, generate, many, many1, regex, string, parsecmap
@@ -66,21 +67,22 @@ class AMIParamConfigurator(HasTraits):
         # Super-class initialization is ABSOLUTELY NECESSARY, in order
         # to get all the Traits/UI machinery setup correctly.
         super(AMIParamConfigurator, self).__init__()
+        self._log = logging.getLogger("pyami")
 
         # Parse the AMI file contents, storing any errors or warnings,
         # and customize the view accordingly.
         err_str, param_dict = parse_ami_param_defs(ami_file_contents_str)
         if not param_dict:
-            print("Empty dictionary returned by parse_ami_param_defs()!")
-            print(f"Error message:\n{err_str}")
+            self._log.error("Empty dictionary returned by parse_ami_param_defs()!")
+            self._log.error(f"Error message:\n{err_str}")
             raise KeyError("Failed to parse AMI file; see console for more detail.")
         top_branch = list(param_dict.items())[0]
         param_dict = top_branch[1]
         if "Reserved_Parameters" not in param_dict:
-            print(f"Error: {err_str}\nParameters: {param_dict}")
+            self._log.error(f"Error: {err_str}\nParameters: {param_dict}")
             raise KeyError("Unable to get 'Reserved_Parameters' from the parameter set.")
         if "Model_Specific" not in param_dict:
-            print(f"Error: {err_str}\nParameters: {param_dict}")
+            self._log.error(f"Error: {err_str}\nParameters: {param_dict}")
             raise KeyError("Unable to get 'Model_Specific' from the parameter set.")
         pdict = param_dict["Reserved_Parameters"]
         pdict.update(param_dict["Model_Specific"])
@@ -103,7 +105,7 @@ class AMIParamConfigurator(HasTraits):
 
     def __call__(self):
         self.open_gui()
-        
+
     def open_gui(self):
         """Present a customized GUI to the user, for parameter customization."""
         self.edit_traits()
@@ -327,7 +329,8 @@ def proc_branch(branch):
 
             results = (err_str, param_dict)
     except:
-        print(f"Error processing branch:\n{param_tags}")
+        log = logging.getLogger("pyami")
+        log.error(f"Error processing branch:\n{param_tags}")
     return results
 
 

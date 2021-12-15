@@ -14,7 +14,7 @@ avoid circular imports.
 
 Copyright (c) 2019 by David Banas; All rights reserved World wide.
 """
-
+import logging
 import platform
 
 from datetime     import datetime
@@ -58,8 +58,6 @@ class IBISModel(HasTraits):
     The complete dictionary containing all parsed models may be retrieved,
     via the ``model_dict`` property.
     """
-
-    _log = ""
 
     pin_     = Property(Any,  depends_on=["pin"])
     pin_rlcs = Property(Dict, depends_on=["pin"])
@@ -108,16 +106,17 @@ class IBISModel(HasTraits):
 
         self.debug = debug
         self.GUI   = gui
+        self._log = logging.getLogger("pyami")
         if debug:
-            self.log("pyibisami.ibis_file.IBISModel initializing in debug mode...")
+            self._log.debug("pyibisami.ibis_file.IBISModel initializing in debug mode...")
         else:
-            self.log("pyibisami.ibis_file.IBISModel initializing in non-debug mode...")
+            self.log.info("pyibisami.ibis_file.IBISModel initializing in non-debug mode...")
 
         # Parse the IBIS file contents, storing any errors or warnings, and validate it.
         with open(ibis_file_name) as file:
             ibis_file_contents_str = file.read()
-        err_str, model_dict = parse_ibis_file(ibis_file_contents_str, debug=debug)
-        self.log("IBIS parsing errors/warnings:\n" + err_str)
+        err_str, model_dict = parse_ibis_file(ibis_file_contents_str)
+        self._log.error("IBIS parsing errors/warnings:\n" + err_str)
         if 'components' not in model_dict or not model_dict['components']:
             raise ValueError("This IBIS model has no components! Parser messages:\n" + err_str)
         components = model_dict['components']
@@ -150,7 +149,7 @@ class IBISModel(HasTraits):
         self._comp_changed(list(components)[0])     # Wasn't being called automatically.
         self._pin_changed(self.pins[0])             # Wasn't being called automatically.
 
-        self.log("Done.")
+        self._log.info("Successfully read IBIS model.")
 
     def __str__(self):
         return(f"IBIS Model '{self._model_dict['file_name']}'")
@@ -161,7 +160,7 @@ class IBISModel(HasTraits):
             for k in ['ibis_ver', 'file_name', 'file_rev']:
                 res += k + ':\t' + str(self._model_dict[k]) + '\n'
         except:
-            print(self._model_dict)
+            self._log.error(self._model_dict)
             raise
         res += 'date' + ':\t\t' + str(self._model_dict['date']) + '\n'
         res += "\nComponents:"
@@ -181,17 +180,6 @@ class IBISModel(HasTraits):
     def __call__(self):
         """Present a customized GUI to the user, for model selection, etc."""
         self.edit_traits(kind='livemodal')
-
-    # Logger & Pop-up
-    def log(self, msg, alert=False):
-        """Log a message to the console and, optionally, to terminal and/or pop-up dialog."""
-        _msg = msg.strip()
-        txt = "\n[{}]: IBISModel: {}\n".format(datetime.now(), _msg)
-        self._log += txt
-        if self.debug:
-            print(txt)
-        if alert and self.GUI:
-            message(_msg, "PyAMI Alert")
 
     def default_traits_view(self):
         view = View(
@@ -238,11 +226,6 @@ class IBISModel(HasTraits):
         return self._ibis_parsing_errors
 
     @property
-    def log_txt(self):
-        """The complete log since instantiation."""
-        return self._log
-
-    @property
     def model_dict(self):
         "Dictionary of all model keywords."
         return self._model_dict
@@ -286,18 +269,18 @@ class IBISModel(HasTraits):
         if fnames:
             dll_file = fnames[0]
             ami_file = fnames[1]
-            self.log(
+            self._log.warning(
                 "There was an [Algorithmic Model] keyword in this model.\n \
 If you wish to use the AMI model associated with this IBIS model,\n \
 please, go the 'Equalization' tab and enable it now.",
                 alert=True)
         elif 'algorithmic_model' in model._subDict:
-            self.log(f"There was an [Algorithmic Model] keyword for this model,\n \
+            self._log.error(f"There was an [Algorithmic Model] keyword for this model,\n \
 but no executable for your platform: {os_type}-{os_bits};\n \
 PyBERT native equalization modeling being used instead.",
                 alert=True)
         else:
-            self.log("There was no [Algorithmic Model] keyword for this model;\n \
+            self._log.warning("There was no [Algorithmic Model] keyword for this model;\n \
 PyBERT native equalization modeling being used instead.",
                 alert=True)
         self._dll_file = dll_file

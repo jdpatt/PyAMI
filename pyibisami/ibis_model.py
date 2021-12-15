@@ -10,15 +10,13 @@ https://ibis.org/
 
 Copyright (c) 2019 by David Banas; All rights reserved World wide.
 """
-
+import logging
 import numpy      as np
 
 from traits.api   import HasTraits, Trait, String, Float, List
 from traitsui.api import Item, View, ModalButtons, Group, spring
 from chaco.api    import ArrayPlotData, Plot
 from enable.component_editor import ComponentEditor
-
-DBG = False
 
 class Component(HasTraits):
     """Encapsulation of a particular component from an IBIS model file.
@@ -33,6 +31,7 @@ class Component(HasTraits):
         # Super-class initialization is ABSOLUTELY NECESSARY, in order
         # to get all the Traits/UI machinery setup correctly.
         super(Component, self).__init__()
+        self._log = logging.getLogger("pyami")
 
         # Stash the sub-keywords/parameters.
         self._subDict = subDict
@@ -49,11 +48,11 @@ class Component(HasTraits):
         if not self._mfr:
             raise LookupError("Missing [Manufacturer]!")
         if not self._pkg:
-            print(self._mfr)
+            self._log.error(self._mfr)
             raise LookupError("Missing [Package]!")
         if not self._pins:
             raise LookupError("Missing [Pin]!")
-        
+
         # Set up the GUI.
         self.add_trait('manufacturer', String(self._mfr))
         self.add_trait('package',      String(self._pkg))
@@ -136,7 +135,7 @@ class Model(HasTraits):
             raise LookupError("Missing Model_type!")
         if not self._vrange:
             raise LookupError("Missing [Voltage Range]!")
-        
+
         def proc_iv(xs):
             """Process an I/V table.
             """
@@ -370,7 +369,7 @@ class Model(HasTraits):
     def slew(self):
         "The driver slew rate."
         return self._slew
-        
+
     @property
     def zin(self):
         "The input impedance."
@@ -380,7 +379,7 @@ class Model(HasTraits):
     def ccomp(self):
         "The parasitic capacitance."
         return self._ccomp
-        
+
     @property
     def mtype(self):
         """Model type."""

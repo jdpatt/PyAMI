@@ -7,6 +7,7 @@ Original Date:   July 3, 2012
 
 Copyright (c) 2019 David Banas; All rights reserved World wide.
 """
+import logging
 from pathlib import Path
 from typing import Dict
 
@@ -217,7 +218,7 @@ class AMIModel:
 
     def __init__(self, filename):
         """ Load the dll and bind the 3 AMI functions."""
-
+        self._log = logging.getLogger("pyami")
         self._ami_mem_handle = None
         my_dll = CDLL(filename)
         self._amiInit = my_dll.AMI_Init
@@ -263,7 +264,7 @@ class AMIModel:
         self._num_aggressors = init_object._init_data["num_aggressors"]
         self._sample_interval = init_object._init_data["sample_interval"]
         self._bit_time = init_object._init_data["bit_time"]
-        
+
         # Construct the AMI parameters string.
         def sexpr(pname, pval):
             """Create an S-expression from a parameter name/value pair,
@@ -303,19 +304,19 @@ class AMIModel:
                 byref(self._msg),
             )
         except OSError as err:
-            print(f"pyibisami.ami_model.AMIModel.initialize(): Call to AMI_Init() bombed:")
-            print(err)
-            print(f"AMI_Init() address = {self._amiInit}")
-            print(f"Values sent into AMI_Init():")
-            print(f"&initOut = {byref(self._initOut)}")
-            print(f"row_size = {self._row_size}")
-            print(f"num_aggressors = {self._num_aggressors}")
-            print(f"sample_interval = {self._sample_interval}")
-            print(f"bit_time = {self._bit_time}")
-            print(f"ami_params_in = {self._ami_params_in}")
-            print(f"&ami_params_out = {byref(self._ami_params_out)}")
-            print(f"&ami_mem_handle = {byref(self._ami_mem_handle)}")
-            print(f"&msg = {byref(self._msg)}")
+            self._log.error(f"pyibisami.ami_model.AMIModel.initialize(): Call to AMI_Init() bombed:")
+            self._log.error(err)
+            self._log.debug(f"AMI_Init() address = {self._amiInit}")
+            self._log.debug(f"Values sent into AMI_Init():")
+            self._log.debug(f"&initOut = {byref(self._initOut)}")
+            self._log.debug(f"row_size = {self._row_size}")
+            self._log.debug(f"num_aggressors = {self._num_aggressors}")
+            self._log.debug(f"sample_interval = {self._sample_interval}")
+            self._log.debug(f"bit_time = {self._bit_time}")
+            self._log.debug(f"ami_params_in = {self._ami_params_in}")
+            self._log.debug(f"&ami_params_out = {byref(self._ami_params_out)}")
+            self._log.debug(f"&ami_mem_handle = {byref(self._ami_mem_handle)}")
+            self._log.debug(f"&msg = {byref(self._msg)}")
             raise err
 
         # Initialize attributes used by getWave().

@@ -10,7 +10,7 @@ https://ibis.org/
 
 Copyright (c) 2019 by David Banas; All rights reserved World wide.
 """
-
+import logging
 import re
 from parsec import  regex, eof, many1, many, string, generate, sepBy1, \
                     one_of, skip, none_of, times, ParseError, count, \
@@ -19,6 +19,7 @@ from parsec import  regex, eof, many1, many, string, generate, sepBy1, \
 from pyibisami.ibis_model import Component, Model
 
 DBG = False
+log = logging.getLogger("pyami")
 
 # Parser Definitions
 
@@ -85,11 +86,9 @@ na = word(string("NA") | string("na")).result(None)
 def typminmax():
     "Parse Typ/Min/Max values."
     typ    = yield number
-    if DBG:
-        print(f"Typ.: {typ}")
+    log.debug(f"Typ.: {typ}")
     minmax = yield optional(count(number, 2) | count(na, 2).result([]), [])
-    if DBG:
-        print(f"Min./Max.: {minmax}")
+    log.debug(f"Min./Max.: {minmax}")
     yield ignore  # So that ``typminmax`` behaves as a lexeme.
     res = [typ]
     res.extend(minmax)
@@ -167,8 +166,7 @@ def keyword(kywrd=""):
 def param():
     "Parse IBIS parameter."
     pname = yield regex(r"^[a-zA-Z]\w*", re.MULTILINE)  # Parameters must begin with a letter in column 1.
-    if DBG:
-        print(pname)
+    log.debug(pname)
     res = yield (regex(r"\s*") >> ((word(string("=")) >> number) | typminmax | name | rest_line))
     yield ignore  # So that ``param`` functions as a lexeme.
     return (pname.lower(), res)
@@ -197,8 +195,7 @@ def node(valid_keywords, stop_keywords, debug=False):
         "Parse keyword syntax."
         nm = yield keyword()
         nmL = nm.lower()
-        if debug:
-            print(nmL)
+        log.debug(nmL)
         if nmL in valid_keywords:
             if nmL == "end":  # Because ``ibis_file`` expects this to be the last thing it sees,
                 return fail   # we can't consume it here.
@@ -209,8 +206,7 @@ def node(valid_keywords, stop_keywords, debug=False):
         else:
             res = yield skip_keyword
         yield ignore                             # So that ``kywrd`` behaves as a lexeme.
-        if debug:
-            print("  ", nmL + ":", res)
+        log.debug("  ", nmL + ":", res)
         return (nmL, res)
 
     return (kywrd | param)
@@ -246,8 +242,7 @@ Model_keywords = {
 def model():
     "Parse [Model]."
     nm = yield name
-    if DBG:
-        print("    ", nm)
+    log.debug("    ", nm)
     res = yield many1(node(Model_keywords, IBIS_keywords, debug=DBG))
     return {nm: Model(dict(res))}
 
@@ -258,8 +253,7 @@ rlc = lexeme(string("R_pin") | string("L_pin") | string("C_pin"))
 def package():
     "Parse package RLC values."
     rlcs = yield many1(param)
-    if DBG:
-        print(f"rlcs: {rlcs}")
+    log.debug(f"rlcs: {rlcs}")
     return dict(rlcs)
 
 def pin(rlcs):
@@ -354,7 +348,7 @@ def ibis_file():
     res = yield ignore >> many1True(node(IBIS_kywrd_parsers, {}, debug=DBG)) << end
     return res
 
-def parse_ibis_file(ibis_file_contents_str, debug=False):
+def parse_ibis_file(ibis_file_contents_str):
     """
     Parse the contents of an IBIS file.
 
@@ -380,11 +374,9 @@ def parse_ibis_file(ibis_file_contents_str, debug=False):
             model_dict:
                 Dictionary containing keyword definitions (empty upon failure).
     """
-    DBG = debug
     try:
         nodes = ibis_file.parse(ibis_file_contents_str)
-        if DBG:
-            print("Parsed nodes:\n", nodes)
+        log.debug("Parsed nodes:\n", nodes)
     except ParseError as pe:
         err_str = "Expected {} at {} in {}".format(pe.expected, pe.loc(), pe.text[pe.index])
         return err_str, {}
