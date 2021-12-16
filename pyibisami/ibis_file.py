@@ -107,10 +107,8 @@ class IBISModel(HasTraits):
         self.debug = debug
         self.GUI   = gui
         self._log = logging.getLogger("pyami")
-        if debug:
-            self._log.debug("pyibisami.ibis_file.IBISModel initializing in debug mode...")
-        else:
-            self.log.info("pyibisami.ibis_file.IBISModel initializing in non-debug mode...")
+        self._log.debug(f"IBISModel Debug Mode: {str(self.debug)}")
+
 
         # Parse the IBIS file contents, storing any errors or warnings, and validate it.
         with open(ibis_file_name) as file:
