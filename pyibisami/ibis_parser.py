@@ -18,7 +18,7 @@ from parsec import  regex, eof, many1, many, string, generate, sepBy1, \
 
 from pyibisami.ibis_model import Component, Model
 
-DBG = False
+DEBUG = False
 log = logging.getLogger("pyami")
 
 # Parser Definitions
@@ -243,7 +243,7 @@ def model():
     "Parse [Model]."
     nm = yield name
     log.debug("    ", nm)
-    res = yield many1(node(Model_keywords, IBIS_keywords, debug=DBG))
+    res = yield many1(node(Model_keywords, IBIS_keywords, debug=DEBUG))
     return {nm: Model(dict(res))}
 
 # [Component]
@@ -296,7 +296,7 @@ Component_keywords = {
 def comp():
     "Parse [Component]."
     nm = yield lexeme(name)
-    res = yield many1(node(Component_keywords, IBIS_keywords, debug=DBG))
+    res = yield many1(node(Component_keywords, IBIS_keywords, debug=DEBUG))
     return {nm: Component(dict(res))}
 
 # [Model Selector]
@@ -345,7 +345,7 @@ IBIS_kywrd_parsers.update({
 
 @generate("IBIS File")
 def ibis_file():
-    res = yield ignore >> many1True(node(IBIS_kywrd_parsers, {}, debug=DBG)) << end
+    res = yield ignore >> many1True(node(IBIS_kywrd_parsers, {}, debug=DEBUG)) << end
     return res
 
 def parse_ibis_file(ibis_file_contents_str):
