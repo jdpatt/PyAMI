@@ -271,15 +271,15 @@ class IBISModel(HasTraits):
                 "There was an [Algorithmic Model] keyword in this model.\n \
 If you wish to use the AMI model associated with this IBIS model,\n \
 please, go the 'Equalization' tab and enable it now.",
-                alert=True)
+                extra={"alert":True})
         elif 'algorithmic_model' in model._subDict:
             self._log.error(f"There was an [Algorithmic Model] keyword for this model,\n \
 but no executable for your platform: {os_type}-{os_bits};\n \
 PyBERT native equalization modeling being used instead.",
-                alert=True)
+                extra={"alert":True})
         else:
             self._log.warning("There was no [Algorithmic Model] keyword for this model;\n \
 PyBERT native equalization modeling being used instead.",
-                alert=True)
+                extra={"alert":True})
         self._dll_file = dll_file
         self._ami_file = ami_file
