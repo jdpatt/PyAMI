@@ -9,8 +9,8 @@ Original Date:   July 20, 2012
 Copyright (c) 2012 David Banas; All rights reserved World wide.
 """
 
+import os
 import shutil
-from os import chdir
 from pathlib import Path
 
 import click
@@ -104,7 +104,7 @@ def expand_params(input_parameters):
         for cfg_filename in cfg_files:
             cfg_name = cfg_filename.stem
             param_list = []
-            with open(cfg_filename, "rt") as cfg_file:
+            with open(cfg_filename, "r", encoding="UTF-8") as cfg_file:
                 description = cfg_file.readline()
                 expr = ""
                 for line in cfg_file:
@@ -115,12 +115,12 @@ def expand_params(input_parameters):
                     if toks[-1] == "\\":  # Test for line continuation.
                         expr = expr.rstrip("\\\n")
                     else:
-                        param_list.append(eval(compile(expr, cfg_filename, "eval")))
+                        param_list.append(eval(compile(expr, cfg_filename, "eval")))  # pylint: disable=eval-used
                         expr = ""
             params.append((cfg_name, description, param_list))
     else:
         # params = eval(compile(input_parameters, "cmd_line", "eval"))
-        params = eval(input_parameters)
+        params = eval(input_parameters)  # pylint: disable=eval-used
     return params
 
 
@@ -143,13 +143,13 @@ def run_tests(**kwargs):
     # someone, whom may not have the PyIBIS-AMI package installed.
     shutil.copy(str(Path(__file__).parent.joinpath("test_results.xsl")), str(out_dir))
 
-    print("Testing model: {}".format(model))
-    print("Using tests in: {}".format(test_dir))
+    print(f"Testing model: {model}")
+    print(f"Using tests in: {test_dir}")
     params = expand_params(kwargs["params"])
 
     # Run the tests.
-    print("Sending XHTML output to: {}".format(xml_filename))
-    with open(xml_filename, "w") as xml_file:
+    print(f"Sending XHTML output to: {xml_filename}")
+    with open(xml_filename, "w", encoding="UTF-8") as xml_file:
         xml_file.write('<?xml version="1.0" encoding="ISO-8859-1"?>\n')
         xml_file.write('<?xml-stylesheet type="text/xsl" href="test_results.xsl"?>\n')
         xml_file.write("<tests>\n")
@@ -159,20 +159,20 @@ def run_tests(**kwargs):
         tests = list(test_dir.glob("*.em"))
     for test in tests:
         # print("Running test: {} ...".format(test.stem))
-        print("Running test: {} ...".format(test))
+        print(f"Running test: {test} ...")
         theModel = AMIModel(model.__str__())
         plot_names = plot_name(xml_filename.stem)
         for cfg_item in params:
             cfg_name = cfg_item[0]
-            print("\tRunning test configuration: {} ...".format(cfg_name))
+            print(f"\tRunning test configuration: {cfg_name} ...")
             description = cfg_item[1]
             param_list = cfg_item[2]
             colors = color_picker(num_hues=len(param_list))
-            with open(xml_filename, "a") as xml_file:
+            with open(xml_filename, "a", encoding="UTF-8") as xml_file:
                 interpreter = em.Interpreter(
                     output=xml_file,
                     globals={
-                        "name": "{} ({})".format(test, cfg_name),
+                        "name": f"{test} ({cfg_name})",
                         "model": theModel,
                         "data": param_list,
                         # "plot_names": plot_name(xml_filename.stem),
@@ -184,18 +184,19 @@ def run_tests(**kwargs):
                 )
                 try:
                     cwd = Path().cwd()
-                    chdir(out_dir)  # So that the images are saved in the output directory.
-                    interpreter.file(open(Path(test_dir, test)))
-                    chdir(cwd)
-                except:
+                    os.chdir(out_dir)  # So that the images are saved in the output directory.
+                    with open(Path(test_dir, test), encoding="UTF-8") as test_to_run:
+                        interpreter.file(test_to_run)
+                    os.chdir(cwd)
+                except Exception:
                     print("Something went wrong.")
                 finally:
                     interpreter.shutdown()
         print("Test:", test, "complete.")
-    with open(xml_filename, "a") as xml_file:
+    with open(xml_filename, "a", encoding="UTF-8") as xml_file:
         xml_file.write("</tests>\n")
 
-    print("Please, open file, `{}` in a Web browser, in order to view the test results.".format(xml_filename))
+    print(f"Please, open file, `{xml_filename}` in a Web browser, in order to view the test results.")
 
 
 @click.command(context_settings=dict(ignore_unknown_options=True, help_option_names=["-h", "--help"]))

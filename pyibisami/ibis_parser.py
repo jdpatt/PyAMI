@@ -59,7 +59,7 @@ def word(p):
 @generate("remainder of line")
 def rest_line():
     "Parse remainder of line."
-    chars = yield (many(none_of("\n\r")) << ignore)  # So that we still function as a lexeme.
+    chars = yield many(none_of("\n\r")) << ignore  # So that we still function as a lexeme.
     return "".join(chars)
 
 
@@ -112,9 +112,9 @@ na = word(string("NA") | string("na")).result(None)
 def typminmax():
     "Parse Typ/Min/Max values."
     typ = yield number
-    log.debug(f"Typ.: {typ}")
+    log.debug("Typ.: %d", typ)
     minmax = yield optional(count(number, 2) | count(na, 2).result([]), [])
-    log.debug(f"Min./Max.: {minmax}")
+    log.debug("Min./Max.: %s", minmax)
     yield ignore  # So that ``typminmax`` behaves as a lexeme.
     res = [typ]
     res.extend(minmax)
@@ -129,8 +129,7 @@ def ratio():
     [num, den] = yield (separated(number, string("/"), 2, maxt=2, end=False) | na.result([0, 0]))
     if den:
         return num / den
-    else:
-        return None
+    return None
 
 
 ramp_line = string("dV/dt_") >> ((string("r").result("rising") | string("f").result("falling")) << ignore) + times(
@@ -206,8 +205,7 @@ def keyword(kywrd=""):
             # assert res.lower() == kywrd.lower(), f"Expecting: {kywrd}; got: {res}."  # Does not work!
             if res.lower() == kywrd.lower():
                 return res
-            else:
-                return fail.desc(f"Expecting: {kywrd}; got: {res}.")
+            return fail.desc(f"Expecting: {kywrd}; got: {res}.")
         return res
 
     return fn
@@ -252,14 +250,13 @@ def node(valid_keywords, stop_keywords, debug=False):
         if nmL in valid_keywords:
             if nmL == "end":  # Because ``ibis_file`` expects this to be the last thing it sees,
                 return fail  # we can't consume it here.
-            else:
-                res = yield valid_keywords[nmL]  # Parse the sub-keyword.
+            res = yield valid_keywords[nmL]  # Parse the sub-keyword.
         elif nmL in stop_keywords:
             return fail  # Stop parsing.
         else:
             res = yield skip_keyword
         yield ignore  # So that ``kywrd`` behaves as a lexeme.
-        log.debug("  ", nmL + ":", res)
+        log.debug("%s:%s", nmL, res)
         return (nmL, res)
 
     return kywrd | param
@@ -299,7 +296,7 @@ Model_keywords = {
 def model():
     "Parse [Model]."
     nm = yield name
-    log.debug("    ", nm)
+    log.debug("    %s", nm)
     res = yield many1(node(Model_keywords, IBIS_keywords, debug=DEBUG))
     return {nm: Model(dict(res))}
 
@@ -312,12 +309,12 @@ rlc = lexeme(string("R_pin") | string("L_pin") | string("C_pin"))
 def package():
     "Parse package RLC values."
     rlcs = yield many1(param)
-    log.debug(f"rlcs: {rlcs}")
+    log.debug("rlcs: %s", rlcs)
     return dict(rlcs)
 
 
 def pin(rlcs):
-    "Parse indiviual component pin."
+    "Parse individual component pin."
 
     @generate("Component Pin")
     def fn():
@@ -341,7 +338,7 @@ def pins():
     def filt(x):
         (_, (mod, _)) = x
         m = mod.upper()
-        return not ((m == "POWER") or (m == "GND") or (m == "NC"))
+        return not m in ("POWER", "GND", "NC")
 
     yield (lexeme(string("signal_name")) << lexeme(string("model_name")))
     rlcs = yield optional(count(rlc, 3), [])
@@ -442,17 +439,17 @@ def parse_ibis_file(ibis_file_contents_str):
         (str, dict): A pair containing:
 
             err_str:
-                A message describing the nature of any parse failure that occured.
+                A message describing the nature of any parse failure that occurred.
             model_dict:
                 Dictionary containing keyword definitions (empty upon failure).
     """
     try:
         nodes = ibis_file.parse(ibis_file_contents_str)
-        log.debug("Parsed nodes:\n", nodes)
+        log.debug("Parsed nodes:\n%s", nodes)
     except ParseError as pe:
-        err_str = "Expected {} at {} in {}".format(pe.expected, pe.loc(), pe.text[pe.index])
+        err_str = f"Expected {pe.expected} at {pe.loc()} in {pe.text[pe.index]}"
         return err_str, {}
-    except:
+    except Exception:
         raise
 
     kw_dict = {}

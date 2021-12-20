@@ -1,24 +1,29 @@
+import shutil
 from pathlib import Path
 from unittest.mock import patch
 
-import pyibisami.ami_config as ami_config
+from pyibisami import ami_config
 
 
-class TestAMIConfig(object):
-    @patch.object(ami_config, "date", autospec=True)
-    def test_ami_config(self, mock_date):
-        """Using the example_tx.py and supporting cpp.em file verify the output."""
+@patch.object(ami_config, "date", autospec=True)
+def test_ami_config(mock_date, tmp_path):
+    """Use example_tx.py and supporting cpp.em found under test/examples to generate a model."""
 
-        mock_date.today.return_value = "2019-02-10"
-        from pyibisami.ami_config import ami_config
+    mock_date.today.return_value = "2019-02-10"  # Mock the object data so that we can test it.
 
-        ami_config(Path(__file__).parent.joinpath("examples", "example_tx.py"))
+    # Copy the examples to a temproray path.
+    FILES = ["example_tx.py", "example_tx.cpp.em"]
+    examples_folder = Path(__file__).parent.joinpath("examples")
+    for file in FILES:
+        shutil.copy(examples_folder.joinpath(file), tmp_path.joinpath(file))
 
-        with open(Path(__file__).parent.joinpath("examples", "example_tx.ami")) as ami_file:
-            ami = ami_file.read()
-            assert (
-                ami
-                == r"""(example_tx
+    ami_config.ami_config(py_file=tmp_path.joinpath("example_tx.py"))
+
+    with open(tmp_path.joinpath("example_tx.ami"), encoding="UTF-8") as ami_file:
+        ami = ami_file.read()
+        assert (
+            ami
+            == r"""(example_tx
 
     (Description "Example Tx model from ibisami package.")
 
@@ -72,13 +77,14 @@ class TestAMIConfig(object):
 )
 
 """
-            )
+        )
 
-        with open(Path(__file__).parent.joinpath("examples", "example_tx.ibs")) as ibis_file:
-            ibis = ibis_file.read()
-            assert (
-                ibis
-                == r"""[IBIS Ver]   5.1
+    #! If you editor has trim trailing whitespace, this will fail.
+    with open(tmp_path.joinpath("example_tx.ibs"), encoding="UTF-8") as ibis_file:
+        ibis = ibis_file.read()
+        assert (
+            ibis
+            == r"""[IBIS Ver]   5.1
 
 
 
@@ -170,15 +176,14 @@ dV/dt_f    0.540/108.00p    0.512/511.58p    0.566/56.57p
 
 
 [END]
-
 """
-            )
+        )
 
-        with open(Path(__file__).parent.joinpath("examples", "example_tx.cpp")) as cpp_file:
-            cpp = cpp_file.read()
-            assert (
-                cpp
-                == r"""/** \file example_tx.cpp
+    with open(tmp_path.joinpath("example_tx.cpp"), encoding="UTF-8") as cpp_file:
+        cpp = cpp_file.read()
+        assert (
+            cpp
+            == r"""/** \file example_tx.cpp
  *  \brief Example of using ibisami to build a Tx model.
  *
  * Original author: David Banas <br>
@@ -267,7 +272,4 @@ class MyTx : public AmiTx {
 AMIModel *ami_model = &my_tx;  ///< The pointer required by the API implementation.
 
 """
-            )
-        Path(__file__).parent.joinpath("examples", "example_tx.ami").unlink()
-        Path(__file__).parent.joinpath("examples", "example_tx.ibs").unlink()
-        Path(__file__).parent.joinpath("examples", "example_tx.cpp").unlink()
+        )

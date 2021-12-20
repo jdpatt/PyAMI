@@ -43,6 +43,6 @@ empy_exec_test.*
 .*
 
 tests/examples/out
-Pipfile*
 tests/examples/test_results
+tests/examples/example_tx.cpp
 htmlcov

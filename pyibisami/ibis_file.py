@@ -77,8 +77,7 @@ class IBISModel(HasTraits):
         model_dict = self._model_dict
         if "model_selectors" in model_dict and mname in model_dict["model_selectors"]:
             return list(map(lambda pr: pr[0], model_dict["model_selectors"][mname]))
-        else:
-            return [mname]
+        return [mname]
 
     def get_pins(self):
         """Get the list of appropriate pins, given our type (i.e. - Tx or Rx)."""
@@ -89,11 +88,10 @@ class IBISModel(HasTraits):
             mods = self.get_models(mname)
             mod = self._models[mods[0]]
             mod_type = mod.mtype.lower()
-            tx_ok = (mod_type == "output") or (mod_type == "i/o")
+            tx_ok = mod_type in ("output", "i/o")
             if self._is_tx:
                 return tx_ok
-            else:
-                return not tx_ok
+            return not tx_ok
 
         return list(filter(pin_ok, list(pins)))
 
@@ -111,18 +109,18 @@ class IBISModel(HasTraits):
 
         # Super-class initialization is ABSOLUTELY NECESSARY, in order
         # to get all the Traits/UI machinery setup correctly.
-        super(IBISModel, self).__init__()
+        super().__init__()
 
         self.debug = debug
         self.GUI = gui
         self._log = logging.getLogger("pyami")
-        self._log.debug(f"IBISModel Debug Mode: {str(self.debug)}")
+        self._log.debug("IBISModel Debug Mode: %s", str(self.debug))
 
         # Parse the IBIS file contents, storing any errors or warnings, and validate it.
-        with open(ibis_file_name) as file:
+        with open(ibis_file_name, encoding="UTF-8") as file:
             ibis_file_contents_str = file.read()
         err_str, model_dict = parse_ibis_file(ibis_file_contents_str)
-        self._log.error("IBIS parsing errors/warnings:\n" + err_str)
+        self._log.error("IBIS parsing errors/warnings:\n%s", err_str)
         if "components" not in model_dict or not model_dict["components"]:
             raise ValueError("This IBIS model has no components! Parser messages:\n" + err_str)
         components = model_dict["components"]
@@ -283,9 +281,11 @@ please, go the 'Equalization' tab and enable it now.",
             )
         elif "algorithmic_model" in model._subDict:
             self._log.error(
-                f"There was an [Algorithmic Model] keyword for this model,\n \
-but no executable for your platform: {os_type}-{os_bits};\n \
+                "There was an [Algorithmic Model] keyword for this model,\n \
+but no executable for your platform: %s-%s;\n \
 PyBERT native equalization modeling being used instead.",
+                os_type,
+                os_bits,
                 extra={"alert": True},
             )
         else:

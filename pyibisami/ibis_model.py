@@ -30,7 +30,7 @@ class Component(HasTraits):
 
         # Super-class initialization is ABSOLUTELY NECESSARY, in order
         # to get all the Traits/UI machinery setup correctly.
-        super(Component, self).__init__()
+        super().__init__()
         self._log = logging.getLogger("pyami")
 
         # Stash the sub-keywords/parameters.
@@ -114,7 +114,7 @@ class Model(HasTraits):
 
         # Super-class initialization is ABSOLUTELY NECESSARY, in order
         # to get all the Traits/UI machinery setup correctly.
-        super(Model, self).__init__()
+        super().__init__()
 
         # Stash the sub-keywords/parameters.
         self._subDict = subDict
@@ -145,7 +145,7 @@ class Model(HasTraits):
                 raise ValueError("Insufficient number of I-V data points!")
             try:
                 vs, iss = zip(*(xs))  # Idiomatic Python for ``unzip``.
-            except:
+            except Exception:
                 raise ValueError(f"xs: {xs}")
             ityps, imins, imaxs = zip(*iss)
             vmeas = self._vmeas
@@ -160,7 +160,7 @@ class Model(HasTraits):
                     return abs((vs[ix] - vs[ix - 1]) / (ivals[ix] - ivals[ix - 1]))
                 except ZeroDivisionError:
                     return 1e7  # Use 10 MOhms in place of infinity.
-                except:
+                except Exception:
                     raise
 
             zs = map(calcZ, zip([vs, vs, vs], [ityps, imins, imaxs]))
@@ -168,7 +168,7 @@ class Model(HasTraits):
 
         # Infer impedance and/or rise/fall time, as per model type.
         mtype = self._mtype.lower()
-        if mtype == "output" or mtype == "i/o":
+        if mtype in ("output", "i/o"):
             if "pulldown" not in subDict or "pullup" not in subDict:
                 raise LookupError("Missing I-V curves!")
             plotdata = ArrayPlotData()
@@ -273,8 +273,7 @@ class Model(HasTraits):
             if x:
                 ((_, _), fs) = x[0]
                 return fs
-            else:
-                return []
+            return []
 
         def splitExecs(fs):
             wins, lins = partition(isWin, fs)
@@ -297,7 +296,7 @@ class Model(HasTraits):
         self.add_trait("rref", String(self._rref))
         self.add_trait("trange", String(self._trange))
         self.add_trait("vrange", String(self._vrange))
-        if mtype == "output" or mtype == "i/o":
+        if mtype in ("output", "i/o"):
             self.add_trait("zout", String(self._zout))
             self.add_trait("slew", String(self._slew))
         elif mtype == "input":
@@ -319,7 +318,7 @@ class Model(HasTraits):
                 show_border=True,
             ),
         ]
-        if mtype == "output" or mtype == "i/o":
+        if mtype in ("output", "i/o"):
             self._content.append(Item("zout", label="Impedance (Ohms)", style="readonly", format_str="%4.1f"))
             self._content.append(Item("slew", label="Slew Rate (V/ns)", style="readonly", format_str="%4.1f"))
             self._content.append(Item("plot_iv", editor=ComponentEditor(), show_label=False))

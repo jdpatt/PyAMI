@@ -66,7 +66,7 @@ class AMIParamConfigurator(HasTraits):
 
         # Super-class initialization is ABSOLUTELY NECESSARY, in order
         # to get all the Traits/UI machinery setup correctly.
-        super(AMIParamConfigurator, self).__init__()
+        super().__init__()
         self._log = logging.getLogger("pyami")
 
         # Parse the AMI file contents, storing any errors or warnings,
@@ -74,15 +74,15 @@ class AMIParamConfigurator(HasTraits):
         err_str, param_dict = parse_ami_param_defs(ami_file_contents_str)
         if not param_dict:
             self._log.error("Empty dictionary returned by parse_ami_param_defs()!")
-            self._log.error(f"Error message:\n{err_str}")
+            self._log.error("Error message:\n%s", err_str)
             raise KeyError("Failed to parse AMI file; see console for more detail.")
         top_branch = list(param_dict.items())[0]
         param_dict = top_branch[1]
         if "Reserved_Parameters" not in param_dict:
-            self._log.error(f"Error: {err_str}\nParameters: {param_dict}")
+            self._log.error("Error: %s\nParameters: %s", err_str, param_dict)
             raise KeyError("Unable to get 'Reserved_Parameters' from the parameter set.")
         if "Model_Specific" not in param_dict:
-            self._log.error(f"Error: {err_str}\nParameters: {param_dict}")
+            self._log.error("Error: %s\nParameters: %s", err_str, param_dict)
             raise KeyError("Unable to get 'Model_Specific' from the parameter set.")
         pdict = param_dict["Reserved_Parameters"]
         pdict.update(param_dict["Model_Specific"])
@@ -157,8 +157,8 @@ class AMIParamConfigurator(HasTraits):
             param_dict.pvalue = new_val
             try:
                 eval(f"self.set({branch_name}_={new_val})")  # mapped trait; see below
-            except:
-                eval(f"self.set({branch_name}={new_val})")
+            except Exception:
+                eval(f"self.set({branch_name}={new_val})")  # pylint: disable=eval-used
         else:
             raise TypeError(f"{param_dict} is not of type: AMIParameter!")
 
@@ -198,7 +198,7 @@ class AMIParamConfigurator(HasTraits):
                 # See the docs on the *HasTraits* class, if this is confusing.
                 try:  # Querry for a mapped trait, first, by trying to get '<trait_name>_'. (Note the underscore.)
                     res[pname] = self.get(pname + "_")[pname + "_"]
-                except:  # If we get an exception, we have an ordinary (i.e. - not mapped) trait.
+                except Exception:  # We have an ordinary (i.e. - not mapped) trait.
                     res[pname] = self.get(pname)[pname]
         elif isinstance(param, dict):  # We received a dictionary of subparameters, in 'param'.
             subs = {}
@@ -296,14 +296,14 @@ def proc_branch(branch):
         if not branch:
             err_str = "ERROR: Empty branch provided to proc_branch()!\n"
         else:
-            err_str = "ERROR: Malformed item: {}\n".format(branch[0])
+            err_str = f"ERROR: Malformed item: {branch[0]}\n"
         results = (err_str, {})
 
     param_name = branch[0]
     param_tags = branch[1]
 
     if not param_tags:
-        err_str = "ERROR: No tags/subparameters provided for parameter, '{}'\n".format(param_name)
+        err_str = f"ERROR: No tags/subparameters provided for parameter, '{param_name}'\n"
         results = (err_str, {})
 
     try:
@@ -326,15 +326,15 @@ def proc_branch(branch):
                 temp_str, temp_dict = proc_branch(param_tag)
                 param_dict[param_name].update(temp_dict)
                 if temp_str:
-                    err_str = "Error returned by recursive call, while processing parameter, '{}':\n{}".format(
-                        param_name, temp_str
+                    err_str = (
+                        f"Error returned by recursive call, while processing parameter, '{param_name}':\n{temp_str}"
                     )
                     results = (err_str, param_dict)
 
             results = (err_str, param_dict)
-    except:
+    except Exception:
         log = logging.getLogger("pyami")
-        log.error(f"Error processing branch:\n{param_tags}")
+        log.error("Error processing branch:\n%s", param_tags)
     return results
 
 
@@ -387,7 +387,7 @@ def parse_ami_param_defs(param_str):
     try:
         res = ami_defs.parse(param_str)
     except ParseError as pe:
-        err_str = "Expected {} at {} in:\n{}".format(pe.expected, pe.loc(), pe.text[pe.index :])
+        err_str = f"Expected {pe.expected} at {pe.loc()} in:\n{pe.text[pe.index:]}"
         return err_str, {}
 
     err_str, param_dict = proc_branch(res)
@@ -405,9 +405,7 @@ def parse_ami_param_defs(param_str):
             tmp_params = params[label]
             for param_name in list(tmp_params.keys()):
                 if param_name not in AMIParameter.RESERVED_PARAM_NAMES:
-                    err_str += "WARNING: Unrecognized reserved parameter name, '{}', found in parameter definition string!\n".format(
-                        param_name
-                    )
+                    err_str += f"WARNING: Unrecognized reserved parameter name, '{param_name}', found in parameter definition string!\n"
                     continue
                 param = tmp_params[param_name]
                 if param.pname == "AMI_Version":
@@ -422,9 +420,7 @@ def parse_ami_param_defs(param_str):
         elif label == "description":
             pass
         else:
-            err_str += "WARNING: Unrecognized group with label, '{}', found in parameter definition string!\n".format(
-                label
-            )
+            err_str += f"WARNING: Unrecognized group with label, '{label}', found in parameter definition string!\n"
 
     if not reserved_found:
         err_str += "ERROR: Reserved parameters section not found! It is required."
@@ -494,7 +490,7 @@ def make_gui_items(pname, param, first_call=False):
                 sub_items.extend(tmp_items)
                 new_traits.extend(tmp_traits)
 
-        # Put all top-level ungrouped parameters in a single VGroup.
+        # Put all top-level non-grouped parameters in a single VGroup.
         top_lvl_params = []
         sub_params = []
         for item in sub_items:
