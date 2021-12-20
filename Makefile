@@ -1,15 +1,16 @@
-# Replace the individual build scripts with one Makefile to provide the same functionality.
-.PHONY: tox clean test lint
+.PHONY: all lint format tests clean
 
-tox:
-	tox
+all: format tests lint
 
 lint:
-	tox -e pylint,flake8
+	pylint pyibisami/ tests/; mypy -p pyibisami --ignore-missing-imports
 
-test:
-	tox -e py37
+format:
+	autoflake --in-place --remove-all-unused-imports --expand-star-imports \
+	--ignore-init-module-imports --recursive pyibisami/ tests/; isort pyibisami/ tests/; black pyibisami/ tests/
+
+tests:
+	pytest -vv -n 4 --disable-pytest-warnings tests/
 
 clean:
-	rm -rf .tox docs/build/ __pycache__/ tests/__pycache__ .pytest_cache/ *.egg-info \
-		Pipfile Pipfile.lock .venv
+	rm -rf .pytest_cache .tox htmlcov *.egg-info .coverage

@@ -1,0 +1,26 @@
+[tool.black]
+line-length = 119
+
+[tool.isort]
+profile = "black"
+known_first_party = ["pyibisami"]
+known_third_party = ["traits", "traitsui", "chaco", "enable"]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-vv"
+xfail_strict = true
+
+[tool.mypy]
+exclude="solvers"
+plugins="numpy.typing.mypy_plugin"
+
+[tool.pylint.'MESSAGES CONTROL']
+max-line-length = 119
+fail-under = 9.0
+disable= [
+    "invalid-name",
+    "wrong-import-order",
+    "wrong-import-position",
+    "broad-except"
+]
