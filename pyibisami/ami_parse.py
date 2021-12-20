@@ -10,8 +10,8 @@ Copyright (c) 2019 David Banas; all rights reserved World wide.
 import logging
 import re
 
-from parsec import ParseError, generate, many, many1, regex, string, parsecmap
-from traits.api import Bool, Enum, HasTraits, Range, Trait, List
+from parsec import ParseError, generate, many, many1, regex, string
+from traits.api import Bool, Enum, HasTraits, Range, Trait
 from traitsui.api import Group, Item, View
 from traitsui.menu import ModalButtons
 
@@ -90,7 +90,7 @@ class AMIParamConfigurator(HasTraits):
             # "Model Specific In/InOut Parameters", param_dict["Model_Specific"], first_call=True
             "Model In/InOut Parameters",
             pdict,
-            first_call=True
+            first_call=True,
         )
         trait_names = []
         for trait in new_traits:
@@ -150,7 +150,9 @@ class AMIParamConfigurator(HasTraits):
             if branch_name in param_dict:
                 param_dict = param_dict[branch_name]
             else:
-                raise ValueError(f"Failed parameter tree search looking for: {branch_name}; available keys: {param_dict.keys()}")
+                raise ValueError(
+                    f"Failed parameter tree search looking for: {branch_name}; available keys: {param_dict.keys()}"
+                )
         if isinstance(param_dict, AMIParameter):
             param_dict.pvalue = new_val
             try:
@@ -188,8 +190,7 @@ class AMIParamConfigurator(HasTraits):
         return res
 
     def input_ami_param(self, params, pname):
-        """Retrieve one AMI parameter, or dictionary of subparameters.
-        """
+        """Retrieve one AMI parameter, or dictionary of subparameters."""
         res = {}
         param = params[pname]
         if isinstance(param, AMIParameter):
@@ -206,6 +207,7 @@ class AMIParamConfigurator(HasTraits):
             res[pname] = subs
         return res
 
+
 #####
 # AMI file parser.
 #####
@@ -220,20 +222,21 @@ def lexeme(p):
     """Lexer for words."""
     return p << ignore  # skip all ignored characters.
 
+
 def int2tap(x):
     """Convert integer to tap position."""
-    if (x[0] == '-'):
-        res = ("pre" + x[1:])
+    if x[0] == "-":
+        res = "pre" + x[1:]
     else:
-        res = ("post" + x)
+        res = "post" + x
     return res
 
 
 lparen = lexeme(string("("))
 rparen = lexeme(string(")"))
 number = lexeme(regex(r"[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?"))
-integ  = lexeme(regex(r"[-+]?[0-9]+"))
-nat    = lexeme(regex(r"[0-9]+"))
+integ = lexeme(regex(r"[-+]?[0-9]+"))
+nat = lexeme(regex(r"[0-9]+"))
 tap_ix = integ.parsecmap(int2tap)
 symbol = lexeme(regex(r"[a-zA-Z_][^\s()]*"))
 true = lexeme(string("True")).result(True)
@@ -242,6 +245,7 @@ ami_string = lexeme(regex(r'"[^"]*"'))
 
 atom = number | symbol | ami_string | (true | false)
 node_name = symbol | tap_ix  # `tap_ix` is new and gives the tap position; negative positions are allowed.
+
 
 @generate("AMI node")
 def node():

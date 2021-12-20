@@ -1,9 +1,7 @@
-from pathlib import Path
 import sys
+from pathlib import Path
 
-import pytest
-
-from pyibisami.ami_model import loadWave, AMIModelInitializer, AMIModel
+from pyibisami.ami_model import AMIModel, AMIModelInitializer, loadWave
 
 
 def test_loadWave(tmp_path):
@@ -38,7 +36,7 @@ class Test_AMIModel(object):
 
         the_model = AMIModel(example_so)
 
-        initializer = AMIModelInitializer({'root_name': "exampleTx"})
+        initializer = AMIModelInitializer({"root_name": "exampleTx"})
 
         the_model.initialize(initializer)
         assert the_model.msg == b"Initializing Tx...\n\n"

@@ -5,18 +5,20 @@ import pyibisami.ami_config as ami_config
 
 
 class TestAMIConfig(object):
-
     @patch.object(ami_config, "date", autospec=True)
     def test_ami_config(self, mock_date):
         """Using the example_tx.py and supporting cpp.em file verify the output."""
 
         mock_date.today.return_value = "2019-02-10"
         from pyibisami.ami_config import ami_config
+
         ami_config(Path(__file__).parent.joinpath("examples", "example_tx.py"))
 
         with open(Path(__file__).parent.joinpath("examples", "example_tx.ami")) as ami_file:
             ami = ami_file.read()
-            assert ami == r"""(example_tx
+            assert (
+                ami
+                == r"""(example_tx
 
     (Description "Example Tx model from ibisami package.")
 
@@ -70,10 +72,13 @@ class TestAMIConfig(object):
 )
 
 """
+            )
 
         with open(Path(__file__).parent.joinpath("examples", "example_tx.ibs")) as ibis_file:
             ibis = ibis_file.read()
-            assert ibis == r"""[IBIS Ver]   5.1
+            assert (
+                ibis
+                == r"""[IBIS Ver]   5.1
 
 
 
@@ -167,10 +172,13 @@ dV/dt_f    0.540/108.00p    0.512/511.58p    0.566/56.57p
 [END]
 
 """
+            )
 
         with open(Path(__file__).parent.joinpath("examples", "example_tx.cpp")) as cpp_file:
             cpp = cpp_file.read()
-            assert cpp == r"""/** \file example_tx.cpp
+            assert (
+                cpp
+                == r"""/** \file example_tx.cpp
  *  \brief Example of using ibisami to build a Tx model.
  *
  * Original author: David Banas <br>
@@ -259,6 +267,7 @@ class MyTx : public AmiTx {
 AMIModel *ami_model = &my_tx;  ///< The pointer required by the API implementation.
 
 """
+            )
         Path(__file__).parent.joinpath("examples", "example_tx.ami").unlink()
         Path(__file__).parent.joinpath("examples", "example_tx.ibs").unlink()
         Path(__file__).parent.joinpath("examples", "example_tx.cpp").unlink()

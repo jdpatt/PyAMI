@@ -7,13 +7,12 @@ Original Date:   July 3, 2012
 
 Copyright (c) 2019 David Banas; All rights reserved World wide.
 """
+import copy as cp
 import logging
+from ctypes import CDLL, byref, c_char_p, c_double
 from pathlib import Path
 from typing import Dict
 
-import copy as cp
-import unicodedata
-from ctypes import CDLL, byref, c_char_p, c_double
 import numpy as np
 
 
@@ -78,16 +77,16 @@ def interpFile(filename, sample_per):
 
 
 class AMIModelInitializer:
-    """ Class containing the initialization data for an instance of ``AMIModel``.
+    """Class containing the initialization data for an instance of ``AMIModel``.
 
-        Created primarily to facilitate use of the PyAMI package at the
-        pylab command prompt, this class can be used by the pylab user,
-        in order to store all the data required to initialize an instance
-        of class ``AMIModel``. In this way, the pylab user may assemble
-        the AMIModel initialization data just once, and modify it
-        incrementally, as she experiments with different initialization
-        settings. In this way, she can avoid having to type a lot of
-        redundant constants every time she invokes the AMIModel constructor.
+    Created primarily to facilitate use of the PyAMI package at the
+    pylab command prompt, this class can be used by the pylab user,
+    in order to store all the data required to initialize an instance
+    of class ``AMIModel``. In this way, the pylab user may assemble
+    the AMIModel initialization data just once, and modify it
+    incrementally, as she experiments with different initialization
+    settings. In this way, she can avoid having to type a lot of
+    redundant constants every time she invokes the AMIModel constructor.
     """
 
     ami_params = {"root_name": ""}
@@ -101,43 +100,43 @@ class AMIModelInitializer:
     }
 
     def __init__(self, ami_params: Dict, **optional_args):
-        """ Constructor accepts a mandatory dictionary containing the
-            AMI parameters, as well as optional initialization
-            data overrides and validates them, before using them to
-            update the local initialization data structures.
+        """Constructor accepts a mandatory dictionary containing the
+        AMI parameters, as well as optional initialization
+        data overrides and validates them, before using them to
+        update the local initialization data structures.
 
-            Valid names of optional initialization data overrides:
+        Valid names of optional initialization data overrides:
 
-            - channel_response
-                a matrix of ``c_double's`` where the first row represents the
-                impulse response of the analog channel, and the rest represent
-                the impulse responses of several aggressor-to-victim far end
-                crosstalk (FEXT) channels.
+        - channel_response
+            a matrix of ``c_double's`` where the first row represents the
+            impulse response of the analog channel, and the rest represent
+            the impulse responses of several aggressor-to-victim far end
+            crosstalk (FEXT) channels.
 
-                Default) a single 128 element vector containing an ideal impulse
+            Default) a single 128 element vector containing an ideal impulse
 
-            - row_size
-                integer giving the size of the rows in ``channel_response``.
+        - row_size
+            integer giving the size of the rows in ``channel_response``.
 
-                Default) 128
+            Default) 128
 
-            - num_aggressors
-                integer giving the number or rows in ``channel_response``, minus
-                one.
+        - num_aggressors
+            integer giving the number or rows in ``channel_response``, minus
+            one.
 
-                Default) 0
+            Default) 0
 
-            - sample_interval
-                c_double giving the time interval, in seconds, between
-                successive elements in any row of ``channel_response``.
+        - sample_interval
+            c_double giving the time interval, in seconds, between
+            successive elements in any row of ``channel_response``.
 
-                Default) 25e-12 (40 GHz sampling rate)
+            Default) 25e-12 (40 GHz sampling rate)
 
-            - bit_time
-                c_double giving the bit period (i.e. - unit interval) of the
-                link, in seconds.
+        - bit_time
+            c_double giving the bit period (i.e. - unit interval) of the
+            link, in seconds.
 
-                Default) 100e-12 (10 Gbits/s)
+            Default) 100e-12 (10 Gbits/s)
         """
 
         self.ami_params = {"root_name": ""}
@@ -209,15 +208,15 @@ class AMIModelInitializer:
 
 
 class AMIModel:
-    """ Class defining the structure and behavior of a AMI Model.
+    """Class defining the structure and behavior of a AMI Model.
 
-        Notes:
-            * Makes the calling of ``AMI_Close()`` automagic,
-              by calling it from the destructor.
+    Notes:
+        * Makes the calling of ``AMI_Close()`` automagic,
+          by calling it from the destructor.
     """
 
     def __init__(self, filename):
-        """ Load the dll and bind the 3 AMI functions."""
+        """Load the dll and bind the 3 AMI functions."""
         self._log = logging.getLogger("pyami")
         self._ami_mem_handle = None
         my_dll = CDLL(filename)
@@ -229,18 +228,18 @@ class AMIModel:
         self._amiClose = my_dll.AMI_Close
 
     def __del__(self):
-        """ Destructor - Calls AMI_Close with handle to AMI model memory.
+        """Destructor - Calls AMI_Close with handle to AMI model memory.
 
-            This obviates the need for the user to call the AMI_Close
-            function explicitly, and guards against memory leaks, during
-            PyLab command prompt operation, by ensuring that AMI_Close
-            gets called automagically when the model goes out of scope.
+        This obviates the need for the user to call the AMI_Close
+        function explicitly, and guards against memory leaks, during
+        PyLab command prompt operation, by ensuring that AMI_Close
+        gets called automagically when the model goes out of scope.
         """
         if self._ami_mem_handle:
             self._amiClose(self._ami_mem_handle)
 
     def initialize(self, init_object):
-        """ Wraps the ``AMI_Init`` function.
+        """Wraps the ``AMI_Init`` function.
 
         Args:
             init_object(AMIModelInitializer): The model initialization data.
@@ -278,6 +277,7 @@ class AMIModel:
                 return sexpr(pname, " ".join(subs))
             else:
                 return f"({pname} {pval})"
+
         ami_params_in = "({} ".format(init_object.ami_params["root_name"])
         for item in list(init_object.ami_params.items()):
             if not item[0] == "root_name":

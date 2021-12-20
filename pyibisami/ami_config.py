@@ -28,8 +28,8 @@ file, so as to ensure consistency between the three.
 
 Copyright (c) 2016 David Banas; all rights reserved World wide.
 """
-from datetime import date
 import importlib.util
+from datetime import date
 from pathlib import Path
 
 import click
@@ -175,6 +175,7 @@ def main(py_file):
        py_file: name of model configuration file (*.py)
     """
     ami_config(py_file)
+
 
 if __name__ == "__main__":
     main()

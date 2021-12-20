@@ -19,11 +19,13 @@ from numpy import floor
 
 from pyibisami.ami_model import AMIModel
 
+
 def plot_name(tst_name, n=0):
     """Plot name generator keeps multiple tests from overwriting eachother's plots."""
     while True:
         n += 1
         yield f"{tst_name}_plot_{n}.png"
+
 
 def hsv2rgb(hue=0, saturation=1.0, value=1.0):
     """Convert a HSV number to and RGB one."""
@@ -41,11 +43,11 @@ def hsv2rgb(hue=0, saturation=1.0, value=1.0):
     H = float(hue)
     S = float(saturation)
     V = float(value)
-    H_i = floor(H / 60.)
-    f = (H / 60.) - H_i
-    p = V * (1. - S)
-    q = V * (1. - f * S)
-    t = V * (1. - (1. - f) * S)
+    H_i = floor(H / 60.0)
+    f = (H / 60.0) - H_i
+    p = V * (1.0 - S)
+    q = V * (1.0 - f * S)
+    t = V * (1.0 - (1.0 - f) * S)
     if H_i == 0:
         R = V
         G = t
@@ -158,7 +160,7 @@ def run_tests(**kwargs):
     for test in tests:
         # print("Running test: {} ...".format(test.stem))
         print("Running test: {} ...".format(test))
-        theModel   = AMIModel(model.__str__())
+        theModel = AMIModel(model.__str__())
         plot_names = plot_name(xml_filename.stem)
         for cfg_item in params:
             cfg_name = cfg_item[0]
@@ -257,6 +259,7 @@ def main(**kwargs):
     """
     # print(kwargs)
     run_tests(**kwargs)
+
 
 if __name__ == "__main__":
     main()
