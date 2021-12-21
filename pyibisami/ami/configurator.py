@@ -8,18 +8,14 @@ Original date:   December 17, 2016
 Copyright (c) 2019 David Banas; all rights reserved World wide.
 """
 import logging
-import re
+from pathlib import Path
 
-from parsec import ParseError, generate, many, many1, regex, string
 from traits.api import Bool, Enum, HasTraits, Range, Trait
 from traitsui.api import Group, Item, View
 from traitsui.menu import ModalButtons
 
-from pyibisami.ami_parameter import AMIParamError, AMIParameter
-
-#####
-# AMI parameter configurator.
-#####
+from pyibisami.ami.parameter import AMIParameter
+from pyibisami.ami.parser import parse_ami_file
 
 
 class AMIParamConfigurator(HasTraits):
@@ -57,23 +53,22 @@ class AMIParamConfigurator(HasTraits):
 
     """
 
-    def __init__(self, ami_file_contents_str):
+    def __init__(self, ami_filepath: Path):
         """
         Args:
-            ami_file_contents_str (str): The unprocessed contents of
-                the AMI file, as a single string.
+            ami_filepath: The filepath to the .ami file.
         """
 
         # Super-class initialization is ABSOLUTELY NECESSARY, in order
         # to get all the Traits/UI machinery setup correctly.
         super().__init__()
-        self._log = logging.getLogger("pyami")
+        self._log = logging.getLogger("pyibisami")
 
         # Parse the AMI file contents, storing any errors or warnings,
         # and customize the view accordingly.
-        err_str, param_dict = parse_ami_param_defs(ami_file_contents_str)
+        err_str, param_dict = parse_ami_file(ami_filepath)
         if not param_dict:
-            self._log.error("Empty dictionary returned by parse_ami_param_defs()!")
+            self._log.error("Empty dictionary returned by parse_ami_file()!")
             self._log.error("Error message:\n%s", err_str)
             raise KeyError("Failed to parse AMI file; see console for more detail.")
         top_branch = list(param_dict.items())[0]
@@ -206,235 +201,6 @@ class AMIParamConfigurator(HasTraits):
                 subs.update(self.input_ami_param(param, sname))
             res[pname] = subs
         return res
-
-
-#####
-# AMI file parser.
-#####
-
-# ignore cases.
-whitespace = regex(r"\s+", re.MULTILINE)
-comment = regex(r"\|.*")
-ignore = many((whitespace | comment))
-
-
-def lexeme(p):
-    """Lexer for words."""
-    return p << ignore  # skip all ignored characters.
-
-
-def int2tap(x):
-    """Convert integer to tap position."""
-    if x[0] == "-":
-        res = "pre" + x[1:]
-    else:
-        res = "post" + x
-    return res
-
-
-lparen = lexeme(string("("))
-rparen = lexeme(string(")"))
-number = lexeme(regex(r"[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?"))
-integ = lexeme(regex(r"[-+]?[0-9]+"))
-nat = lexeme(regex(r"[0-9]+"))
-tap_ix = integ.parsecmap(int2tap)
-symbol = lexeme(regex(r"[a-zA-Z_][^\s()]*"))
-true = lexeme(string("True")).result(True)
-false = lexeme(string("False")).result(False)
-ami_string = lexeme(regex(r'"[^"]*"'))
-
-atom = number | symbol | ami_string | (true | false)
-node_name = symbol | tap_ix  # `tap_ix` is new and gives the tap position; negative positions are allowed.
-
-
-@generate("AMI node")
-def node():
-    "Parse AMI node."
-    yield lparen
-    label = yield node_name
-    values = yield many1(expr)
-    yield rparen
-    return (label, values)
-
-
-expr = atom | node
-ami_defs = ignore >> node
-
-
-def proc_branch(branch):
-    """
-    Process a branch in a AMI parameter definition tree.
-
-    That is, build a dictionary from a pair containing:
-        - a parameter name, and
-        - a list of either:
-            - parameter definition tags, or
-            - subparameters.
-
-    We distinguish between the two possible kinds of payloads, by
-    peaking at the names of the first two items in the list and noting
-    whether they are keys of 'AMIParameter._param_def_tag_procs'.
-    We have to do this twice, due to the dual use of the 'Description'
-    tag and the fact that we have no guarantee of any particular
-    ordering of subparameter branch items.
-
-    Args:
-        p (str, list): A pair, as described above.
-
-    Returns:
-        (str, dict): A pair containing:
-
-            err_str:
-                String containing any errors or warnings encountered,
-                while building the parameter dictionary.
-            param_dict:
-                Resultant parameter dictionary.
-
-    """
-    results = ("", {})  # Empty Results
-    if len(branch) != 2:
-        if not branch:
-            err_str = "ERROR: Empty branch provided to proc_branch()!\n"
-        else:
-            err_str = f"ERROR: Malformed item: {branch[0]}\n"
-        results = (err_str, {})
-
-    param_name = branch[0]
-    param_tags = branch[1]
-
-    if not param_tags:
-        err_str = f"ERROR: No tags/subparameters provided for parameter, '{param_name}'\n"
-        results = (err_str, {})
-
-    try:
-        if (
-            (len(param_tags) > 1)
-            and (param_tags[0][0] in AMIParameter._param_def_tag_procs)
-            and (param_tags[1][0] in AMIParameter._param_def_tag_procs)
-        ):
-            try:
-                results = ("", {param_name: AMIParameter(param_name, param_tags)})
-            except AMIParamError as err:
-                results = (str(err), {})
-        elif param_name == "Description":
-            results = ("", {"description": param_tags[0].strip('"')})
-        else:
-            err_str = ""
-            param_dict = {}
-            param_dict[param_name] = {}
-            for param_tag in param_tags:
-                temp_str, temp_dict = proc_branch(param_tag)
-                param_dict[param_name].update(temp_dict)
-                if temp_str:
-                    err_str = (
-                        f"Error returned by recursive call, while processing parameter, '{param_name}':\n{temp_str}"
-                    )
-                    results = (err_str, param_dict)
-
-            results = (err_str, param_dict)
-    except Exception:
-        log = logging.getLogger("pyami")
-        log.error("Error processing branch:\n%s", param_tags)
-    return results
-
-
-def parse_ami_param_defs(param_str):
-    """
-    Parse the contents of a IBIS-AMI parameter definition file.
-
-    Args:
-        param_str (str): The contents of the file, as a single string.
-
-    Example:
-        ::
-
-            with open(<ami_file_name>) as ami_file:
-                param_str = ami_file.read()
-                (err_str, param_dict) = parse_ami_param_defs(param_str)
-
-    Returns:
-        (str, dict): A pair containing:
-
-            err_str:
-                - None, if parser succeeds.
-                - Helpful message, if it fails.
-            param_dict:
-                Dictionary containing parameter definitions.
-                (Empty, on failure.)
-                It has a single key, at the top level, which is the
-                model root name. This key indexes the actual
-                parameter dictionary, which has the following
-                structure::
-
-                    {
-                        'description'           :   <optional model description string>
-                        'Reserved_Parameters'   :   <dictionary of reserved parameter defintions>
-                        'Model_Specific'        :   <dictionary of model specific parameter definitions>
-                    }
-
-                The keys of the 'Reserved_Parameters' dictionary are
-                limited to those called out in the IBIS-AMI
-                specification.
-
-                The keys of the 'Model_Specific' dictionary can be
-                anything.
-
-                The values of both are either:
-                    - instances of class *AMIParameter*, or
-                    - sub-dictionaries following the same pattern.
-
-    """
-    try:
-        res = ami_defs.parse(param_str)
-    except ParseError as pe:
-        err_str = f"Expected {pe.expected} at {pe.loc()} in:\n{pe.text[pe.index:]}"
-        return err_str, {}
-
-    err_str, param_dict = proc_branch(res)
-    if err_str:
-        return (err_str, {"res": res, "dict": param_dict})
-
-    reserved_found = False
-    init_returns_impulse_found = False
-    getwave_exists_found = False
-    model_spec_found = False
-    params = list(param_dict.items())[0][1]
-    for label in list(params.keys()):
-        if label == "Reserved_Parameters":
-            reserved_found = True
-            tmp_params = params[label]
-            for param_name in list(tmp_params.keys()):
-                if param_name not in AMIParameter.RESERVED_PARAM_NAMES:
-                    err_str += f"WARNING: Unrecognized reserved parameter name, '{param_name}', found in parameter definition string!\n"
-                    continue
-                param = tmp_params[param_name]
-                if param.pname == "AMI_Version":
-                    if param.pusage != "Info" or param.ptype != "String":
-                        err_str += "WARNING: Malformed 'AMI_Version' parameter.\n"
-                elif param.pname == "Init_Returns_Impulse":
-                    init_returns_impulse_found = True
-                elif param.pname == "GetWave_Exists":
-                    getwave_exists_found = True
-        elif label == "Model_Specific":
-            model_spec_found = True
-        elif label == "description":
-            pass
-        else:
-            err_str += f"WARNING: Unrecognized group with label, '{label}', found in parameter definition string!\n"
-
-    if not reserved_found:
-        err_str += "ERROR: Reserved parameters section not found! It is required."
-
-    if not init_returns_impulse_found:
-        err_str += "ERROR: Reserved parameter, 'Init_Returns_Impulse', not found! It is required."
-
-    if not getwave_exists_found:
-        err_str += "ERROR: Reserved parameter, 'GetWave_Exists', not found! It is required."
-
-    if not model_spec_found:
-        err_str += "WARNING: Model specific parameters section not found!"
-
-    return (err_str, param_dict)
 
 
 def make_gui_items(pname, param, first_call=False):

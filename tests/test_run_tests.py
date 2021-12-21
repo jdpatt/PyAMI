@@ -1,4 +1,4 @@
-from pyibisami.run_tests import color_picker, expand_params, hsv2rgb, plot_name
+from pyibisami.tools.run_tests import color_picker, expand_params, hsv2rgb, plot_name
 
 
 def test_hsv2rgb():

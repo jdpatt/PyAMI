@@ -17,7 +17,7 @@ import click
 import em
 from numpy import floor
 
-from pyibisami.ami_model import AMIModel
+from pyibisami.ami import AMIModel
 
 
 def plot_name(tst_name, n=0):

@@ -1,6 +1,6 @@
 import pytest
 
-from pyibisami.ami_parameter import AMIParamError
+from pyibisami.ami.parameter import AMIParamError
 
 
 def test_AMIParamError():

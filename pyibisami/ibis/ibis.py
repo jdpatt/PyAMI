@@ -16,6 +16,7 @@ Copyright (c) 2019 by David Banas; All rights reserved World wide.
 """
 import logging
 import platform
+from pathlib import Path
 
 from traits.api import (
     Any,
@@ -31,7 +32,7 @@ from traits.api import (
 )
 from traitsui.api import HGroup, Item, ModalButtons, VGroup, View, spring
 
-from pyibisami.ibis_parser import parse_ibis_file
+from pyibisami.ibis.parser import parse_ibis_file
 
 
 class IBISModel(HasTraits):
@@ -95,11 +96,10 @@ class IBISModel(HasTraits):
 
         return list(filter(pin_ok, list(pins)))
 
-    def __init__(self, ibis_file_name, is_tx, debug=False, gui=True):
+    def __init__(self, ibis_file: Path, is_tx: bool, debug: bool = False, gui: bool = True):
         """
         Args:
-            ibis_file_contents_str (str): The unprocessed contents of
-                the IBIS file, as a single string.
+            ibis_file: The filepath to the .ibs file.
             is_tx (bool): True if this is a Tx model.
 
         KeywordArgs:
@@ -113,13 +113,11 @@ class IBISModel(HasTraits):
 
         self.debug = debug
         self.GUI = gui
-        self._log = logging.getLogger("pyami")
-        self._log.debug("IBISModel Debug Mode: %s", str(self.debug))
+        self._log = logging.getLogger("pyibisami")
 
         # Parse the IBIS file contents, storing any errors or warnings, and validate it.
-        with open(ibis_file_name, encoding="UTF-8") as file:
-            ibis_file_contents_str = file.read()
-        err_str, model_dict = parse_ibis_file(ibis_file_contents_str)
+        self._log.debug("Parsing %s", ibis_file.name)
+        err_str, model_dict = parse_ibis_file(ibis_file)
         self._log.error("IBIS parsing errors/warnings:\n%s", err_str)
         if "components" not in model_dict or not model_dict["components"]:
             raise ValueError("This IBIS model has no components! Parser messages:\n" + err_str)
@@ -153,7 +151,7 @@ class IBISModel(HasTraits):
         self._comp_changed(list(components)[0])  # Wasn't being called automatically.
         self._pin_changed(self.pins[0])  # Wasn't being called automatically.
 
-        self._log.info("Successfully read IBIS model.")
+        self._log.info("Successfully read %s.", ibis_file.name)
 
     def __str__(self):
         return f"IBIS Model '{self._model_dict['file_name']}'"

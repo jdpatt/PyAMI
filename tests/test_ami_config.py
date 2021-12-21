@@ -2,11 +2,11 @@ import shutil
 from pathlib import Path
 from unittest.mock import patch
 
-from pyibisami import ami_config
+from pyibisami.tools import ami_generator
 
 
-@patch.object(ami_config, "date", autospec=True)
-def test_ami_config(mock_date, tmp_path):
+@patch.object(ami_generator, "date", autospec=True)
+def test_ami_generator(mock_date, tmp_path):
     """Use example_tx.py and supporting cpp.em found under test/examples to generate a model."""
 
     mock_date.today.return_value = "2019-02-10"  # Mock the object data so that we can test it.
@@ -17,7 +17,7 @@ def test_ami_config(mock_date, tmp_path):
     for file in FILES:
         shutil.copy(examples_folder.joinpath(file), tmp_path.joinpath(file))
 
-    ami_config.ami_config(py_file=tmp_path.joinpath("example_tx.py"))
+    ami_generator.ami_generator(py_file=tmp_path.joinpath("example_tx.py"))
 
     with open(tmp_path.joinpath("example_tx.ami"), encoding="UTF-8") as ami_file:
         ami = ami_file.read()
@@ -75,7 +75,6 @@ def test_ami_config(mock_date, tmp_path):
     )
 
 )
-
 """
         )
 

@@ -12,6 +12,7 @@ Copyright (c) 2019 by David Banas; All rights reserved World wide.
 """
 import logging
 import re
+from pathlib import Path
 
 from parsec import (
     ParseError,
@@ -31,10 +32,10 @@ from parsec import (
     times,
 )
 
-from pyibisami.ibis_model import Component, Model
+from pyibisami.ibis.model import Component, Model
 
 DEBUG = False
-log = logging.getLogger("pyami")
+log = logging.getLogger("pyibisami")
 
 # Parser Definitions
 
@@ -248,7 +249,7 @@ def node(valid_keywords, stop_keywords, debug=False):
         nmL = nm.lower()
         log.debug(nmL)
         if nmL in valid_keywords:
-            if nmL == "end":  # Because ``ibis_file`` expects this to be the last thing it sees,
+            if nmL == "end":  # Because ``ibis_file_parser`` expects this to be the last thing it sees,
                 return fail  # we can't consume it here.
             res = yield valid_keywords[nmL]  # Parse the sub-keyword.
         elif nmL in stop_keywords:
@@ -412,17 +413,17 @@ IBIS_kywrd_parsers.update(
 
 
 @generate("IBIS File")
-def ibis_file():
+def ibis_file_parser():
     res = yield ignore >> many1True(node(IBIS_kywrd_parsers, {}, debug=DEBUG)) << end
     return res
 
 
-def parse_ibis_file(ibis_file_contents_str):
+def parse_ibis_file(ibis_file: Path):
     """
     Parse the contents of an IBIS file.
 
     Args:
-        ibis_file_contents_str (str): The contents of the IBIS file, as a single string.
+        ibis_file: The filepath to the .ibs file.
 
     KeywordArgs:
         debug (bool): Output debugging info to console when true.
@@ -430,10 +431,7 @@ def parse_ibis_file(ibis_file_contents_str):
 
     Example:
         ::
-
-            with open(<ibis_file_name>) as ibis_file:
-                ibis_file_contents_str = ibis_file.read()
-                (err_str, model_dict)  = parse_ibis_file(ibis_file_contents_str)
+            (err_str, model_dict)  = parse_ibis_file(ibis_file)
 
     Returns:
         (str, dict): A pair containing:
@@ -444,7 +442,8 @@ def parse_ibis_file(ibis_file_contents_str):
                 Dictionary containing keyword definitions (empty upon failure).
     """
     try:
-        nodes = ibis_file.parse(ibis_file_contents_str)
+        with open(ibis_file, encoding="UTF-8") as in_file:
+            nodes = ibis_file_parser.parse(in_file.read())
         log.debug("Parsed nodes:\n%s", nodes)
     except ParseError as pe:
         err_str = f"Expected {pe.expected} at {pe.loc()} in {pe.text[pe.index]}"

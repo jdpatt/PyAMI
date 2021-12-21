@@ -11,9 +11,9 @@ Copyright (c) 2012 by David Banas; All rights reserved World wide.
 """
 import logging
 
-__version__ = "3.5.1"
+__version__ = "4.0.0"
 __date__ = "December 12, 2021"
 __authors__ = "David Banas"
 __copy__ = "Copyright (c) 2014 David Banas"
 
-logging.getLogger("pyami").addHandler(logging.NullHandler())
+logging.getLogger("pyibisami").addHandler(logging.NullHandler())

@@ -119,7 +119,7 @@ def print_code(pname, param):
     print("       ", "node_names.pop_back();")
 
 
-def ami_config(py_file):
+def ami_generator(py_file):
     """Read in the ``py_file`` and cpp.em file then generate a ibis, ami and cpp."""
     file_base_name = Path(py_file).stem
 
@@ -171,4 +171,4 @@ def main(template):
 
        template: name of model configuration file (*.py)
     """
-    ami_config(template)
+    ami_generator(template)

@@ -217,7 +217,7 @@ class AMIModel:
 
     def __init__(self, filename):
         """Load the dll and bind the 3 AMI functions."""
-        self._log = logging.getLogger("pyami")
+        self._log = logging.getLogger("pyibisami")
         self._ami_mem_handle = None
         my_dll = CDLL(filename)
         self._amiInit = my_dll.AMI_Init

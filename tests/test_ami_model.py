@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 
-from pyibisami.ami_model import AMIModel, AMIModelInitializer, loadWave
+from pyibisami.ami.ami import AMIModel, AMIModelInitializer, loadWave
 
 # pylint: disable=redefined-outer-name,protected-access
 

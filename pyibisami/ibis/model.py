@@ -31,7 +31,7 @@ class Component(HasTraits):
         # Super-class initialization is ABSOLUTELY NECESSARY, in order
         # to get all the Traits/UI machinery setup correctly.
         super().__init__()
-        self._log = logging.getLogger("pyami")
+        self._log = logging.getLogger("pyibisami")
 
         # Stash the sub-keywords/parameters.
         self._subDict = subDict
