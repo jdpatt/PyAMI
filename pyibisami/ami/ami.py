@@ -215,11 +215,11 @@ class AMIModel:
           by calling it from the destructor.
     """
 
-    def __init__(self, filename):
+    def __init__(self, filepath:Path):
         """Load the dll and bind the 3 AMI functions."""
         self._log = logging.getLogger("pyibisami")
         self._ami_mem_handle = None
-        my_dll = CDLL(filename)
+        my_dll = CDLL(filepath)
         self._amiInit = my_dll.AMI_Init
         try:
             self._amiGetWave = my_dll.AMI_GetWave
