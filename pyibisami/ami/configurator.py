@@ -227,8 +227,8 @@ def make_gui_items(pname, param, first_call=False):
                         tmp_dict.update(list(zip(list_tips, param.pvalue)))
                         val = list(tmp_dict.keys())[0]
                         if default:
-                            for tip in tmp_dict:
-                                if tmp_dict[tip] == default:
+                            for tip, pvalue in tmp_dict.items():
+                                if pvalue == default:
                                     val = tip
                                     break
                         new_traits.append((pname, Trait(val, tmp_dict)))

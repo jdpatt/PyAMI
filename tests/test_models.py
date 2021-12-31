@@ -13,9 +13,12 @@ import pytest
 from pyibisami.ami.parser import parse_ami_file
 from pyibisami.ibis.parser import parse_ibis_file
 
+# pylint: disable=redefined-outer-name
+
 
 @pytest.fixture(scope="session")
 def model_folder():
+    """Return a path that is set by the user's local environment variables."""
     folder = Path(os.getenv("PYIBISAMI_TEST_MODELS", default=""))
     print(f"Searching {folder.absolute()}")
     return folder

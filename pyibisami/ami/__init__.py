@@ -1,3 +1,4 @@
+"""pyibisami support for IBIS-AMI models."""
 from pyibisami.ami.ami import AMIModel, AMIModelInitializer
 from pyibisami.ami.configurator import AMIParamConfigurator
 

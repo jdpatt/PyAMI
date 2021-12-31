@@ -1,5 +1,5 @@
 """
-A package of Python modules, used to configure and test IBIS-AMI models.
+A package of Python modules for using, configuring and testing IBIS-AMI models.
 
 .. moduleauthor:: David Banas <capn.freako@gmail.com>
 

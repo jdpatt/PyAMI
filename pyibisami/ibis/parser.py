@@ -222,7 +222,7 @@ def param():
     return (pname.lower(), res)
 
 
-def node(valid_keywords, stop_keywords, debug=False):
+def node(valid_keywords, stop_keywords):
     """Build a node-specific parser.
 
     Args:
@@ -298,7 +298,7 @@ def model():
     "Parse [Model]."
     nm = yield name
     log.debug("    %s", nm)
-    res = yield many1(node(Model_keywords, IBIS_keywords, debug=DEBUG))
+    res = yield many1(node(Model_keywords, IBIS_KEYWORDS))
     return {nm: Model(dict(res))}
 
 
@@ -360,7 +360,7 @@ Component_keywords = {
 def comp():
     "Parse [Component]."
     nm = yield lexeme(name)
-    res = yield many1(node(Component_keywords, IBIS_keywords, debug=DEBUG))
+    res = yield many1(node(Component_keywords, IBIS_KEYWORDS))
     return {nm: Component(dict(res))}
 
 
@@ -375,7 +375,7 @@ def modsel():
 
 # Note: The following list MUST have a complete set of keys,
 #       in order for the parsing logic to work correctly!
-IBIS_keywords = [
+IBIS_KEYWORDS = [
     "model",
     "end",
     "ibis_ver",
@@ -397,7 +397,7 @@ IBIS_keywords = [
     "interconnect_model_set",
 ]
 
-IBIS_kywrd_parsers = dict(zip(IBIS_keywords, [skip_keyword] * len(IBIS_keywords)))
+IBIS_kywrd_parsers = dict(zip(IBIS_KEYWORDS, [skip_keyword] * len(IBIS_KEYWORDS)))
 IBIS_kywrd_parsers.update(
     {
         "model": model,
@@ -414,7 +414,7 @@ IBIS_kywrd_parsers.update(
 
 @generate("IBIS File")
 def ibis_file_parser():
-    res = yield ignore >> many1True(node(IBIS_kywrd_parsers, {}, debug=DEBUG)) << end
+    res = yield ignore >> many1True(node(IBIS_kywrd_parsers, {})) << end
     return res
 
 
@@ -448,8 +448,6 @@ def parse_ibis_file(ibis_file: Path):
     except ParseError as pe:
         err_str = f"Expected {pe.expected} at {pe.loc()} in {pe.text[pe.index]}"
         return err_str, {}
-    except Exception:
-        raise
 
     kw_dict = {}
     components = {}

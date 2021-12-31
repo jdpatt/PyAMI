@@ -22,5 +22,6 @@ disable= [
     "invalid-name",
     "wrong-import-order",
     "wrong-import-position",
-    "broad-except"
+    "broad-except",
+    "missing-module-docstring"
 ]

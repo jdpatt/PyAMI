@@ -145,8 +145,8 @@ class Model(HasTraits):
                 raise ValueError("Insufficient number of I-V data points!")
             try:
                 vs, iss = zip(*(xs))  # Idiomatic Python for ``unzip``.
-            except Exception:
-                raise ValueError(f"xs: {xs}")
+            except Exception as error:
+                raise ValueError(f"xs: {xs}") from error
             ityps, imins, imaxs = zip(*iss)
             vmeas = self._vmeas
 
@@ -160,8 +160,6 @@ class Model(HasTraits):
                     return abs((vs[ix] - vs[ix - 1]) / (ivals[ix] - ivals[ix - 1]))
                 except ZeroDivisionError:
                     return 1e7  # Use 10 MOhms in place of infinity.
-                except Exception:
-                    raise
 
             zs = map(calcZ, zip([vs, vs, vs], [ityps, imins, imaxs]))
             return vs, ityps, imins, imaxs, zs
@@ -266,7 +264,10 @@ class Model(HasTraits):
         def partition(p, xs):
             ts, fs = [], []
             for x in xs:
-                ts.append(x) if p(x) else fs.append(x)
+                if p(x):
+                    ts.append(x)
+                else:
+                    fs.append(x)
             return ts, fs
 
         def getFiles(x):

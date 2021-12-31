@@ -292,13 +292,13 @@ class AMIParameter:
             if param_type in ("Float", "UI"):
                 try:
                     self._value = float(value_str)
-                except (ValueError, TypeError):
-                    raise AMIParamError(f"Couldn't read float from '{value_str}'.\n")
+                except (ValueError, TypeError) as error:
+                    raise AMIParamError(f"Couldn't read float from '{value_str}'.\n") from error
             elif param_type == "Integer":
                 try:
                     self._value = int(value_str)
-                except (ValueError, TypeError):
-                    raise AMIParamError(f"Couldn't read integer from '{value_str}'.\n")
+                except (ValueError, TypeError) as error:
+                    raise AMIParamError(f"Couldn't read integer from '{value_str}'.\n") from error
             elif param_type == "Boolean":
                 if value_str == "True":
                     self._value = True
@@ -316,13 +316,13 @@ class AMIParameter:
             if param_type in ("Float", "UI"):
                 try:
                     temp_vals = list(map(float, vals[:3]))
-                except (ValueError, TypeError):
-                    raise AMIParamError(f"Couldn't read floats from '{vals[:3]}'.\n")
+                except (ValueError, TypeError) as error:
+                    raise AMIParamError(f"Couldn't read floats from '{vals[:3]}'.\n") from error
             else:
                 try:
                     temp_vals = list(map(int, vals[:3]))
-                except (ValueError, TypeError):
-                    raise AMIParamError(f"Couldn't read integers from '{vals[:3]}'.\n")
+                except (ValueError, TypeError) as error:
+                    raise AMIParamError(f"Couldn't read integers from '{vals[:3]}'.\n") from error
             self._value = temp_vals[0]
             self._min = temp_vals[1]
             self._max = temp_vals[2]
@@ -330,19 +330,19 @@ class AMIParameter:
             if param_type in ("Float", "UI"):
                 try:
                     temp_vals = list(map(float, vals))
-                except (ValueError, TypeError):
-                    raise AMIParamError(f"Couldn't read floats from '{vals}'.\n")
+                except (ValueError, TypeError) as error:
+                    raise AMIParamError(f"Couldn't read floats from '{vals}'.\n") from error
             elif param_type in ("Integer", "Tap"):
                 try:
                     temp_vals = list(map(int, vals))
-                except (ValueError, TypeError):
-                    raise AMIParamError(f"Couldn't read integers from '{vals}'.\n")
+                except (ValueError, TypeError) as error:
+                    raise AMIParamError(f"Couldn't read integers from '{vals}'.\n") from error
             else:  # 'param_type' == 'String'
                 try:
                     temp_vals = list(map(str, vals))
                     temp_vals = [x.strip('"') for x in temp_vals]
-                except (ValueError, TypeError):
-                    raise AMIParamError(f"Couldn't read strings from '{vals}'.\n")
+                except (ValueError, TypeError) as error:
+                    raise AMIParamError(f"Couldn't read strings from '{vals}'.\n") from error
             self._value = temp_vals
 
         self._name = name

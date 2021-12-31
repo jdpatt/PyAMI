@@ -114,6 +114,10 @@ class IBISModel(HasTraits):
         self.debug = debug
         self.GUI = gui
         self._log = logging.getLogger("pyibisami")
+        self.filepath: Path = ibis_file
+
+        self._dll_file: str = ""
+        self._ami_file: str = ""
 
         # Parse the IBIS file contents, storing any errors or warnings, and validate it.
         self._log.debug("Parsing %s", ibis_file.name)
@@ -133,7 +137,7 @@ class IBISModel(HasTraits):
         self.add_trait("comp", Trait(list(components)[0], components))  # Doesn't need a custom mapper, because
         self.pins = self.get_pins()  # the thing above it (file) can't change.
         self.add_trait("pin", Enum(self.pins[0], values="pins"))
-        (mname, rlc_dict) = self.pin_
+        (mname, _) = self.pin_
         self.models = self.get_models(mname)
         self.add_trait("mod", Enum(self.models[0], values="models"))
         self.add_trait("ibis_ver", Float(model_dict["ibis_ver"]))
@@ -241,13 +245,13 @@ class IBISModel(HasTraits):
         return self._ami_file
 
     def _comp_changed(self, new_value):
+        # pylint: disable=unused-argument
         self.pins = self.get_pins()
         self.pin = self.pins[0]
 
     def _pin_changed(self, new_value):
-        model_dict = self._model_dict
         # (mname, rlc_dict) = self.pin_  # Doesn't work. Because ``pin_`` is a cached property and hasn't yet been marked "dirty"?
-        (mname, rlc_dict) = self.comp_.pins[new_value]
+        (mname, _) = self.comp_.pins[new_value]
         self.models = self.get_models(mname)
         self.mod = self.models[0]
 
@@ -256,8 +260,7 @@ class IBISModel(HasTraits):
         os_type = self._os_type
         os_bits = self._os_bits
         fnames = []
-        dll_file = ""
-        ami_file = ""
+
         if os_type.lower() == "windows":
             if os_bits == "64bit":
                 fnames = model._exec64Wins
@@ -269,8 +272,8 @@ class IBISModel(HasTraits):
             else:
                 fnames = model._exec32Lins
         if fnames:
-            dll_file = fnames[0]
-            ami_file = fnames[1]
+            self._dll_file = self.filepath.parent.joinpath(fnames[0])
+            self._ami_file = self.filepath.parent.joinpath(fnames[1])
             self._log.warning(
                 "There was an [Algorithmic Model] keyword in this model.\n \
 If you wish to use the AMI model associated with this IBIS model,\n \
@@ -292,5 +295,3 @@ PyBERT native equalization modeling being used instead.",
 PyBERT native equalization modeling being used instead.",
                 extra={"alert": True},
             )
-        self._dll_file = dll_file
-        self._ami_file = ami_file

@@ -28,6 +28,7 @@ def test_no_model_specific_key(ami_test_file):
 
 
 def test_fetch_param_val(ami_test_file):
+    """Test that we can correctly return a valid parameter and a bad one just gets None."""
     ami = AMIParamConfigurator(ami_test_file)
     assert ami.fetch_param_val(["Reserved_Parameters", "Init_Returns_Impulse"])
     assert not ami.fetch_param_val(["Reserved_Parameters", "Bad Name"])
