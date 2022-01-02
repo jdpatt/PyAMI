@@ -109,8 +109,8 @@ class AMIParamConfigurator(HasTraits):
         view = View(
             resizable=False,
             buttons=ModalButtons,
-            title="PyBERT AMI Parameter Configurator",
-            id="pybert.pybert_ami.param_config",
+            title="AMI Parameter Configurator",
+            id="pyibisami.ami.param_config",
         )
         view.set_content(self._content)
         return view

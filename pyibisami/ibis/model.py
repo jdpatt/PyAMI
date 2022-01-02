@@ -83,7 +83,7 @@ class Component(HasTraits):
         view = View(
             resizable=False,
             buttons=ModalButtons,
-            title="PyBERT IBIS Component Viewer",
+            title="IBIS Component Viewer",
             id="pyibisami.ibis_parser.Component",
         )
         view.set_content(self._content)
@@ -350,13 +350,16 @@ class Model(HasTraits):
         return res
 
     def __call__(self):
+        self.open_gui()
+
+    def open_gui(self):
         self.edit_traits(kind="livemodal")
 
     def default_traits_view(self):
         view = View(
             resizable=False,
             buttons=ModalButtons,
-            title="PyBERT IBIS Model Viewer",
+            title="IBIS Model Viewer",
             id="pyibisami.ibis_parser.Model",
         )
         view.set_content(self._content)

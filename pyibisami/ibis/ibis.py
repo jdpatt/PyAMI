@@ -160,6 +160,9 @@ class IBISModel(HasTraits):
     def __str__(self):
         return f"IBIS Model '{self._model_dict['file_name']}'"
 
+    def __call__(self):
+        self.open_gui()
+
     def info(self):
         res = ""
         try:
@@ -183,7 +186,7 @@ class IBISModel(HasTraits):
             res += "\n" + m + ":\n" + "---\n" + str(self._model_dict["models"][m])
         return res
 
-    def __call__(self):
+    def open_gui(self):
         """Present a customized GUI to the user, for model selection, etc."""
         self.edit_traits(kind="livemodal")
 
@@ -208,8 +211,8 @@ class IBISModel(HasTraits):
             ),
             resizable=False,
             buttons=ModalButtons,
-            title="PyBERT IBIS Model Selector",
-            id="pybert.pybert_ami.model_selector",
+            title="IBIS Model Selector",
+            id="pyibisami.ami.model_selector",
         )
         return view
 
