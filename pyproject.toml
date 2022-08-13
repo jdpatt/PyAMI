@@ -19,7 +19,8 @@ dependencies = [
         "scipy==1.9.0",
         "traits==6.4.1",
         "traitsui==7.4.0",
-        "matplotlib==3.5.3"
+        "matplotlib==3.5.3",
+        "pyside2==5.15"
     ]
 
 [project.scripts]
