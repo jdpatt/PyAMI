@@ -1,3 +1,34 @@
+[build-system]
+requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "PyIBIS-AMI"
+dynamic = ["version"]
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "BSD"}
+dependencies = [
+    #! Note: pybert is managed by conda and some of its dependencies are not pip installable.
+    "click",
+    "empy",
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "parsec",
+    "traits",
+    "traitsui"
+    ]
+
+[project.scripts]
+ami-config = "pyibisami.ami_config:main"
+run-tests = "pyibisami.run_tests:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools_scm]
+
 [tool.black]
 line-length = 119
 
