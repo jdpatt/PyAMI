@@ -16,8 +16,14 @@ from pathlib import Path
 
 from parsec import (
     ParseError,
+    Parser,
+    Value,
+    choice,
     count,
+    digit,
     eof,
+    exclude,
+    fail_with,
     generate,
     letter,
     many,
@@ -28,33 +34,60 @@ from parsec import (
     regex,
     separated,
     sepBy1,
+    skip,
     string,
     times,
 )
 
 from pyibisami.ibis.model import Component, Model
 
-DEBUG = False
 log = logging.getLogger("pyibisami")
 
 # Parser Definitions
 
-# TODO: Consider shifting to an exclusively line-oriented parsing strategy.
-
 whitespace = regex(r"\s+", re.MULTILINE)
-# whitespace = regex(r"\s+")
 comment = regex(r"\|.*")
 ignore = many(whitespace | comment)
 
 
+def logf(p, preStr=""):
+    """Logs failure at point of occurrence.
+
+    Args:
+        p (Parser): The original parser.
+
+    KeywordArgs:
+        preStr (str): A prefix string to use in failure message.
+                      (Default = <empty string>)
+    """
+
+    @Parser
+    def fn(txt, ix):
+        res = p(txt, ix)
+        if not res.status:
+            log.error(
+                f"{preStr}: Expected {res.expected} in '{txt[res.index : res.index+5]}' at {ParseError.loc_info(txt, res.index)}."
+            )
+        return res
+
+    return fn
+
+
 def lexeme(p):
-    """Lexer for words."""
-    return p << ignore  # Skip all ignored characters after word, including newlines.
+    """Lexer for words.
+
+    Skips all ignored characters after word, including newlines.
+    """
+    return p << ignore
 
 
 def word(p):
-    """Line limited word lexer."""
-    return p << regex(r"\s*")  # Only skip space after words; don't skip comments or newlines.
+    """Line limited word lexer.
+
+    Only skips space after words; dosen't skip comments or newlines.
+    Requires, at least, one white space character after word.
+    """
+    return p << regex(r"\s+")
 
 
 @generate("remainder of line")
@@ -71,7 +104,6 @@ symbol = lexeme(regex(r"[a-zA-Z_][^\s()\[\]]*"))
 true = lexeme(string("True")).result(True)
 false = lexeme(string("False")).result(False)
 quoted_string = lexeme(regex(r'"[^"]*"'))
-fail = one_of("")
 skip_keyword = (skip_line >> many(none_of("[") >> skip_line)).result(
     "(Skipped.)"
 )  # Skip over everything until the next keyword begins.
@@ -92,7 +124,7 @@ IBIS_num_suf = {
 @generate("number")
 def number():
     "Parse an IBIS numerical value."
-    s = yield word(regex(r"[-+]?[0-9]*\.?[0-9]+(([eE][-+]?[0-9]+)|([TknGmpMuf][a-zA-Z]*))?") << many(letter()))
+    s = yield (regex(r"[-+]?[0-9]*\.?[0-9]+(([eE][-+]?[0-9]+)|([TknGmpMuf][a-zA-Z]*))?") << many(letter()) << ignore)
     m = re.search(r"[^\d]+$", s)
     if m:
         ix = m.start()
@@ -113,9 +145,7 @@ na = word(string("NA") | string("na")).result(None)
 def typminmax():
     "Parse Typ/Min/Max values."
     typ = yield number
-    log.debug("Typ.: %d", typ)
     minmax = yield optional(count(number, 2) | count(na, 2).result([]), [])
-    log.debug("Min./Max.: %s", minmax)
     yield ignore  # So that ``typminmax`` behaves as a lexeme.
     res = [typ]
     res.extend(minmax)
@@ -203,10 +233,10 @@ def keyword(kywrd=""):
         yield ignore  # So that ``keyword`` functions as a lexeme.
         res = "_".join(wordlets)  # Canonicalize to: "<wordlet1>_<wordlet2>_...".
         if kywrd:
-            # assert res.lower() == kywrd.lower(), f"Expecting: {kywrd}; got: {res}."  # Does not work!
             if res.lower() == kywrd.lower():
                 return res
-            return fail.desc(f"Expecting: {kywrd}; got: {res}.")
+            else:
+                return fail_with(f"Expecting: {kywrd}; got: {res}.")
         return res
 
     return fn
@@ -215,9 +245,11 @@ def keyword(kywrd=""):
 @generate("IBIS parameter")
 def param():
     "Parse IBIS parameter."
-    pname = yield regex(r"^[a-zA-Z]\w*", re.MULTILINE)  # Parameters must begin with a letter in column 1.
-    log.debug(pname)
-    res = yield (regex(r"\s*") >> ((word(string("=")) >> number) | typminmax | name | rest_line))
+    # Parameters must begin with a letter in column 1.
+    pname = yield word(regex(r"^[a-zA-Z]\w*", re.MULTILINE))
+    log.debug(f"Parsing parameter {pname}...", end="")
+    res = yield ((word(string("=")) >> (number | rest_line)) | typminmax | name | rest_line)
+    log.debug(res)
     yield ignore  # So that ``param`` functions as a lexeme.
     return (pname.lower(), res)
 
@@ -247,17 +279,18 @@ def node(valid_keywords, stop_keywords):
         "Parse keyword syntax."
         nm = yield keyword()
         nmL = nm.lower()
-        log.debug(nmL)
+        log.debug(f"Parsing keyword: [{nm}]...")
         if nmL in valid_keywords:
-            if nmL == "end":  # Because ``ibis_file_parser`` expects this to be the last thing it sees,
-                return fail  # we can't consume it here.
-            res = yield valid_keywords[nmL]  # Parse the sub-keyword.
+            if nmL == "end":  # Because ``ibis_file`` expects this to be the last thing it sees,
+                return fail_with("")  # we can't consume it here.
+            else:
+                res = yield logf(valid_keywords[nmL], f"[{nm}]")  # Parse the sub-keyword.
         elif nmL in stop_keywords:
-            return fail  # Stop parsing.
+            return fail_with("")  # Stop parsing.
         else:
             res = yield skip_keyword
         yield ignore  # So that ``kywrd`` behaves as a lexeme.
-        log.debug("%s:%s", nmL, res)
+        log.debug(f"Finished parsing keyword: [{nm}].")
         return (nmL, res)
 
     return kywrd | param
@@ -277,8 +310,9 @@ def end():
 @generate("[Ramp]")
 def ramp():
     "Parse [Ramp]."
-    lines = yield count(ramp_line, 2)
-    return dict(lines)
+    params = yield many(exclude(param, ramp_line))
+    lines = yield count(ramp_line, 2).desc("Two ramp_lines")
+    return dict(lines)  # .update(dict(params))
 
 
 Model_keywords = {
@@ -297,9 +331,16 @@ Model_keywords = {
 def model():
     "Parse [Model]."
     nm = yield name
-    log.debug("    %s", nm)
+    log.debug(f"Parsing model: {nm}...")
     res = yield many1(node(Model_keywords, IBIS_KEYWORDS))
-    return {nm: Model(dict(res))}
+    log.debug(f"[Model] {nm} contains: {dict(res).keys()}")
+    try:
+        theModel = Model(dict(res))
+    except LookupError as le:
+        return fail_with(f"[Model] {nm}: {str(le)}")
+    except Exception as err:
+        return fail_with(f"[Model] {nm}: {str(err)}")
+    return {nm: theModel}
 
 
 # [Component]
@@ -360,16 +401,22 @@ Component_keywords = {
 def comp():
     "Parse [Component]."
     nm = yield lexeme(name)
+    log.debug(f"Parsing component: {nm}")
     res = yield many1(node(Component_keywords, IBIS_KEYWORDS))
+    try:
+        theComp = Component(dict(res))
+    except LookupError as le:
+        return fail_with(f"[Component] {nm}: {str(le)}")
+    except Exception as err:
+        return fail_with(f"[Component] {nm}: {str(err)}")
     return {nm: Component(dict(res))}
 
 
-# [Model Selector]
 @generate("[Model Selector]")
 def modsel():
     "Parse [Model Selector]."
     nm = yield name
-    res = yield many1(name + rest_line)
+    res = yield ignore >> many1(name + rest_line)
     return {nm: res}
 
 
@@ -427,7 +474,7 @@ def parse_ibis_file(ibis_file: Path):
 
     KeywordArgs:
         debug (bool): Output debugging info to console when true.
-        Default = False
+            Default = False
 
     Example:
         ::
@@ -442,12 +489,13 @@ def parse_ibis_file(ibis_file: Path):
                 Dictionary containing keyword definitions (empty upon failure).
     """
     try:
-        with open(ibis_file, encoding="UTF-8") as in_file:
-            nodes = ibis_file_parser.parse(in_file.read())
-        log.debug("Parsed nodes:\n%s", nodes)
+        with open(ibis_file, mode="r", encoding="utf-8") as ibis:
+            nodes = ibis_file_parser.parse_strict(ibis.read())  # Parse must consume the entire file.
+        log.debug("Parsed nodes:\n", nodes)
     except ParseError as pe:
-        err_str = f"Expected {pe.expected} at {pe.loc()} in {pe.text[pe.index]}"
-        return err_str, {}
+        return str(pe), {}
+    except:
+        raise
 
     kw_dict = {}
     components = {}

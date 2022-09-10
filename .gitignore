@@ -39,7 +39,9 @@ empy_exec_test.*
 *.orig
 *.rej
 
+# PyAMI
 tests/examples/out
 tests/examples/test_results
 tests/examples/example_tx.cpp
 htmlcov
+*.log

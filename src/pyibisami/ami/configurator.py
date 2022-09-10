@@ -82,7 +82,6 @@ class AMIParamConfigurator(HasTraits):
         pdict = param_dict["Reserved_Parameters"]
         pdict.update(param_dict["Model_Specific"])
         gui_items, new_traits = make_gui_items(
-            # "Model Specific In/InOut Parameters", param_dict["Model_Specific"], first_call=True
             "Model In/InOut Parameters",
             pdict,
             first_call=True,
@@ -103,7 +102,7 @@ class AMIParamConfigurator(HasTraits):
 
     def open_gui(self):
         """Present a customized GUI to the user, for parameter customization."""
-        self.edit_traits()
+        self.configure_traits()
 
     def default_traits_view(self):
         view = View(
@@ -240,7 +239,7 @@ def make_gui_items(pname, param, first_call=False):
                     gui_items.append(Item(pname, tooltip=param.pdescription))
                 else:  # Value
                     new_traits.append((pname, param.pvalue))
-                    gui_items.append(Item(pname, style="readonly", tooltip=param.pdescription))
+                    gui_items.append(Item(pname, tooltip=param.pdescription))
     else:  # subparameter branch
         subparam_names = list(param.keys())
         subparam_names.sort()
