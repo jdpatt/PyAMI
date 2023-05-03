@@ -7,11 +7,14 @@ Original Date:   July 3, 2012
 Copyright (c) 2019 David Banas; All rights reserved World wide.
 """
 import copy as cp
+import logging
 from ctypes import CDLL, byref, c_char_p, c_double
 from pathlib import Path
 from typing import Dict
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 def loadWave(filename):
@@ -299,19 +302,19 @@ class AMIModel:
                 byref(self._msg),
             )
         except OSError as err:
-            print("pyibisami.ami_model.AMIModel.initialize(): Call to AMI_Init() bombed:")
-            print(err)
-            print(f"AMI_Init() address = {self._amiInit}")
-            print("Values sent into AMI_Init():")
-            print(f"&initOut = {byref(self._initOut)}")
-            print(f"row_size = {self._row_size}")
-            print(f"num_aggressors = {self._num_aggressors}")
-            print(f"sample_interval = {self._sample_interval}")
-            print(f"bit_time = {self._bit_time}")
-            print(f"ami_params_in = {self._ami_params_in}")
-            print(f"&ami_params_out = {byref(self._ami_params_out)}")
-            print(f"&ami_mem_handle = {byref(self._ami_mem_handle)}")
-            print(f"&msg = {byref(self._msg)}")
+            logger.error("pyibisami.ami_model.AMIModel.initialize(): Call to AMI_Init() bombed:")
+            logger.error(err)
+            logger.error(f"AMI_Init() address = {self._amiInit}")
+            logger.error("Values sent into AMI_Init():")
+            logger.error(f"&initOut = {byref(self._initOut)}")
+            logger.error(f"row_size = {self._row_size}")
+            logger.error(f"num_aggressors = {self._num_aggressors}")
+            logger.error(f"sample_interval = {self._sample_interval}")
+            logger.error(f"bit_time = {self._bit_time}")
+            logger.error(f"ami_params_in = {self._ami_params_in}")
+            logger.error(f"&ami_params_out = {byref(self._ami_params_out)}")
+            logger.error(f"&ami_mem_handle = {byref(self._ami_mem_handle)}")
+            logger.error(f"&msg = {byref(self._msg)}")
             raise err
 
         # Initialize attributes used by getWave().

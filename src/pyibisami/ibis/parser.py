@@ -9,7 +9,7 @@ https://ibis.org/
 
 Copyright (c) 2019 by David Banas; All rights reserved World wide.
 """
-
+import logging
 import re
 
 from parsec import (
@@ -33,9 +33,11 @@ from parsec import (
     times,
 )
 
-from pyibisami.ibis.model import Component, Model
+from pyibisami.ibis.buffer_model import BufferModel
+from pyibisami.ibis.component import Component
+from pyibisami.ibis.mappings import IBIS_KEYWORDS, IBIS_NUMERICAL_SUFFIXES
 
-DBG = False
+logger = logging.getLogger(__name__)
 
 # Parser Definitions
 
@@ -45,7 +47,7 @@ ignore = many(whitespace | comment)
 
 
 def logf(p, preStr=""):
-    """Logs failure at point of occurence.
+    """Logs failure at point of occurrence.
 
     Args:
         p (Parser): The original parser.
@@ -59,7 +61,7 @@ def logf(p, preStr=""):
     def fn(txt, ix):
         res = p(txt, ix)
         if not res.status:
-            print(
+            logger.warning(
                 f"{preStr}: Expected {res.expected} in '{txt[res.index : res.index+5]}' at {ParseError.loc_info(txt, res.index)}."
             )
         return res
@@ -78,7 +80,7 @@ def lexeme(p):
 def word(p):
     """Line limited word lexer.
 
-    Only skips space after words; dosen't skip comments or newlines.
+    Only skips space after words; doesn't skip comments or newlines.
     Requires, at least, one white space character after word.
     """
     return p << regex(r"\s+")
@@ -102,18 +104,6 @@ skip_keyword = (skip_line >> many(none_of("[") >> skip_line)).result(
     "(Skipped.)"
 )  # Skip over everything until the next keyword begins.
 
-IBIS_num_suf = {
-    "T": "e12",
-    "k": "e3",
-    "n": "e-9",
-    "G": "e9",
-    "m": "e-3",
-    "p": "e-12",
-    "M": "e6",
-    "u": "e-6",
-    "f": "e-15",
-}
-
 
 @generate("number")
 def number():
@@ -123,8 +113,8 @@ def number():
     if m:
         ix = m.start()
         c = s[ix]
-        if c in IBIS_num_suf:
-            res = float(s[:ix] + IBIS_num_suf[c])
+        if c in IBIS_NUMERICAL_SUFFIXES:
+            res = float(s[:ix] + IBIS_NUMERICAL_SUFFIXES[c])
         else:
             raise ParseError("IBIS numerical suffix", s[ix:], ix)
     else:
@@ -240,16 +230,14 @@ def param():
     "Parse IBIS parameter."
     # Parameters must begin with a letter in column 1.
     pname = yield word(regex(r"^[a-zA-Z]\w*", re.MULTILINE))
-    if DBG:
-        print(f"Parsing parameter {pname}...", end="")
+    logger.debug(f"Parsing parameter {pname}...")
     res = yield ((word(string("=")) >> (number | rest_line)) | typminmax | name | rest_line)
-    if DBG:
-        print(res)
+    logger.debug(res)
     yield ignore  # So that ``param`` functions as a lexeme.
     return (pname.lower(), res)
 
 
-def node(valid_keywords, stop_keywords, debug=False):
+def node(valid_keywords, stop_keywords):
     """Build a node-specific parser.
 
     Args:
@@ -274,8 +262,7 @@ def node(valid_keywords, stop_keywords, debug=False):
         "Parse keyword syntax."
         nm = yield keyword()
         nmL = nm.lower()
-        if debug:
-            print(f"Parsing keyword: [{nm}]...")
+        logger.debug(f"Parsing keyword: [{nm}]...")
         if nmL in valid_keywords:
             if nmL == "end":  # Because ``ibis_file`` expects this to be the last thing it sees,
                 return fail_with("")  # we can't consume it here.
@@ -285,8 +272,7 @@ def node(valid_keywords, stop_keywords, debug=False):
         else:
             res = yield skip_keyword
         yield ignore  # So that ``kywrd`` behaves as a lexeme.
-        if debug:
-            print(f"Finished parsing keyword: [{nm}].")
+        logger.debug(f"Finished parsing keyword: [{nm}].")
         return (nmL, res)
 
     return kywrd | param
@@ -328,13 +314,11 @@ Model_keywords = {
 def model():
     "Parse [Model]."
     nm = yield name
-    if DBG:
-        print(f"Parsing model: {nm}...")
-    res = yield many1(node(Model_keywords, IBIS_keywords, debug=DBG))
-    if DBG:
-        print(f"[Model] {nm} contains: {dict(res).keys()}")
+    logger.debug(f"Parsing model: {nm}...")
+    res = yield many1(node(Model_keywords, IBIS_KEYWORDS))
+    logger.debug(f"[Model] {nm} contains: {dict(res).keys()}")
     try:
-        theModel = Model(dict(res))
+        theModel = BufferModel(dict(res))
     except LookupError as le:
         return fail_with(f"[Model] {nm}: {str(le)}")
     except Exception as err:
@@ -350,13 +334,12 @@ rlc = lexeme(string("R_pin") | string("L_pin") | string("C_pin"))
 def package():
     "Parse package RLC values."
     rlcs = yield many1(param)
-    if DBG:
-        print(f"rlcs: {rlcs}")
+    logger.debug(f"rlcs: {rlcs}")
     return dict(rlcs)
 
 
 def pin(rlcs):
-    "Parse indiviual component pin."
+    "Parse individual component pin."
 
     @generate("Component Pin")
     def fn():
@@ -401,9 +384,8 @@ Component_keywords = {
 def comp():
     "Parse [Component]."
     nm = yield lexeme(name)
-    if DBG:
-        print(f"Parsing component: {nm}")
-    res = yield many1(node(Component_keywords, IBIS_keywords, debug=DBG))
+    logger.debug(f"Parsing component: {nm}")
+    res = yield many1(node(Component_keywords, IBIS_KEYWORDS))
     try:
         Component(dict(res))
     except LookupError as le:
@@ -421,31 +403,7 @@ def modsel():
     return {nm: res}
 
 
-# Note: The following list MUST have a complete set of keys,
-#       in order for the parsing logic to work correctly!
-IBIS_keywords = [
-    "model",
-    "end",
-    "ibis_ver",
-    "comment_char",
-    "file_name",
-    "file_rev",
-    "date",
-    "source",
-    "notes",
-    "disclaimer",
-    "copyright",
-    "component",
-    "model_selector",
-    "submodel",
-    "external_circuit",
-    "test_data",
-    "test_load",
-    "define_package_model",
-    "interconnect_model_set",
-]
-
-IBIS_kywrd_parsers = dict(zip(IBIS_keywords, [skip_keyword] * len(IBIS_keywords)))
+IBIS_kywrd_parsers = dict(zip(IBIS_KEYWORDS, [skip_keyword] * len(IBIS_KEYWORDS)))
 IBIS_kywrd_parsers.update(
     {
         "model": model,
@@ -462,63 +420,27 @@ IBIS_kywrd_parsers.update(
 
 @generate("IBIS File")
 def ibis_file():
-    res = yield ignore >> many1True(node(IBIS_kywrd_parsers, {}, debug=DBG)) << end
+    res = yield ignore >> many1True(node(IBIS_kywrd_parsers, {})) << end
     return res
 
 
-def parse_ibis_file(ibis_file_contents_str, debug=False):
+def parse_file_into_model(ibis_file_contents_str, ibis_model):
     """Parse the contents of an IBIS file.
 
     Args:
         ibis_file_contents_str (str): The contents of the IBIS file, as a single string.
 
-    KeywordArgs:
-        debug (bool): Output debugging info to console when true.
-            Default = False
-
-    Example:
-        ::
-
-            with open(<ibis_file_name>) as ibis_file:
-                ibis_file_contents_str = ibis_file.read()
-                (err_str, model_dict)  = parse_ibis_file(ibis_file_contents_str)
-
-    Returns:
-        (str, dict): A pair containing:
-
-            err_str:
-                A message describing the nature of any parse failure that occured.
-            model_dict:
-                Dictionary containing keyword definitions (empty upon failure).
     """
-    DBG = debug
     try:
         nodes = ibis_file.parse_strict(ibis_file_contents_str)  # Parse must consume the entire file.
-        if DBG:
-            print("Parsed nodes:\n", nodes)
+        logger.debug("Parsed nodes:\n", nodes)
     except ParseError as pe:
-        return str(pe), {}
-    except:
+        logger.error("Failed to correctly parse IBIS file.")
+        logger.error(pe)
+        raise
+    except Exception as exp:
+        logger.error("Unhandled Exception occurred.")
+        logger.exception(exp)
         raise
 
-    kw_dict = {}
-    components = {}
-    models = {}
-    model_selectors = {}
-    for kw, val in nodes:
-        if kw == "model":
-            models.update(val)
-        elif kw == "component":
-            components.update(val)
-        elif kw == "model_selector":
-            model_selectors.update(val)
-        else:
-            kw_dict.update({kw: val})
-    kw_dict.update(
-        {
-            "components": components,
-            "models": models,
-            "model_selectors": model_selectors,
-        }
-    )
-    return "Success!", kw_dict
+    return ibis_model
