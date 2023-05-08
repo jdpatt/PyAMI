@@ -54,7 +54,7 @@ class IBISModel:
         self.selected_model: Optional[BufferModel] = None
 
     @classmethod
-    def from_ibs_file(cls, filepath: Union[str, Path]):
+    def from_ibis_file(cls, filepath: Union[str, Path]):
         """Parse the IBIS file and get all of the high level information from it.
 
         We don't need to parse everything and validate it all at the beginning but defer that to when a simulation
