@@ -6,7 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "pyibis-ami"
 description = "Facilitates working directly with IBIS-AMI DLLs from the Python command prompt."
 version = "7.99"
-authors = [ {name = "David Banas",     email = "capn.freako@gmail.com"}
+authors = [ {name = "David Banas",     email = "capn.freako@gmail.com"},
+           {name = "David Patterson"}
           ]
 readme = "README.md"
 requires-python = ">=3.10"
