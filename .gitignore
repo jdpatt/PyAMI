@@ -117,6 +117,7 @@ empy_exec_test.*
 *.old
 *.orig
 *.rej
+debug.py
 
 # Temporary files
 !.pre-commit-config.yaml
@@ -131,5 +132,7 @@ examples/test_results/*
 # MacOS system files
 .DS_Store
 
-# Sublime
+# IDE Configurations files
 *.sublime-workspace
+*.sublime-project
+.vscode/
