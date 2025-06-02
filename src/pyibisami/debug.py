@@ -9,5 +9,6 @@ logger = logging.getLogger(__name__)
 
 def setattr(obj: object, name: str, value: Any, /) -> None:
     """Wrapper around builtins.setattr to log the changes from the GUI."""
+    # pylint: disable=redefined-builtin
     builtins.setattr(obj, name, value)
-    logger.debug(f"Set {name} to {value}")
+    logger.debug("Set %s to %s", name, value)

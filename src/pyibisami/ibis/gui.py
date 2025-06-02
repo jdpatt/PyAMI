@@ -27,6 +27,8 @@ if TYPE_CHECKING:
 class IBISModelView(QDialog):
     """A PySide6 dialog for viewing an IBIS model's details."""
 
+    # pylint: disable=too-many-instance-attributes
+
     def __init__(self, model: "Model", parent=None):
         super().__init__(parent)
         self.setWindowTitle(f"IBIS Model Viewer: {model.name}")
@@ -35,6 +37,8 @@ class IBISModelView(QDialog):
         self._populate_fields()
 
     def _init_ui(self):
+        """Initialize the UI for the IBIS Model View."""
+        # pylint: disable=too-many-statements
         layout = QVBoxLayout(self)
 
         # Model type (readonly)
@@ -145,7 +149,7 @@ class IBISModelView(QDialog):
             self.generate_input_iv_plot()
 
     def generate_output_iv_plot(self):
-        # The 'line_style' trait of a LinePlot instance must be 'dash' or 'dot dash' or 'dot' or 'long dash' or 'solid'.
+        """Generate the output I-V plot."""
         plotdata = self.model.plot_data
         self.iv_plot.clear()
         self.iv_plot.plot(
@@ -161,10 +165,12 @@ class IBISModelView(QDialog):
         self.iv_plot.setTitle("Pull-Up/Down I-V Curves")
         self.iv_plot.getAxis("left").setLabel("Iout (A)")
         self.iv_plot.getAxis("bottom").setLabel("Vout (V)")
-        self.iv_plot.setRange(xRange=[0, self.model.voltage_range[0]], yRange=[0, 0.1])
+        self.iv_plot.setRange(
+            xRange=[0, self.model.voltage_range[0]], yRange=[0, 0.1]
+        )  # pylint: disable=unexpected-keyword-arg
 
     def generate_input_iv_plot(self):
-        # The 'line_style' trait of a LinePlot instance must be 'dash' or 'dot dash' or 'dot' or 'long dash' or 'solid'.
+        """Generate the input I-V plot."""
         plotdata = self.model.plot_data
         self.iv_plot.clear()
         if self.model.gnd_clamp:
@@ -190,11 +196,15 @@ class IBISModelView(QDialog):
         self.iv_plot.setTitle("Power/GND Clamp I-V Curves")
         self.iv_plot.getAxis("left").setLabel("Iin (A)")
         self.iv_plot.getAxis("bottom").setLabel("Vin (V)")
-        self.iv_plot.setRange(xRange=[0, self.model.voltage_range[0]], yRange=[0, 0.1])
+        self.iv_plot.setRange(
+            xRange=[0, self.model.voltage_range[0]], yRange=[0, 0.1]
+        )  # pylint: disable=unexpected-keyword-arg
 
 
 class IBISModelSelector(QDialog):
     """A PySide6 dialog for selecting an IBIS model, component, and pin dynamically."""
+
+    # pylint: disable=too-many-instance-attributes
 
     def __init__(self, ibis_model: "IBISModel", parent=None):
         super().__init__(parent)
@@ -205,6 +215,8 @@ class IBISModelSelector(QDialog):
         self._connect_signals()
 
     def _init_ui(self):
+        """Initialize the UI for the IBIS Model Selector."""
+        # pylint: disable=too-many-statements
         layout = QVBoxLayout(self)
 
         # First row: File name (readonly), spring, rev (readonly)
@@ -279,6 +291,7 @@ class IBISModelSelector(QDialog):
         layout.addStretch()
 
     def _populate_fields(self):
+        """Populate the fields for the IBIS Model Selector."""
         self.file_name_label.setText(str(getattr(self.ibis_model, "filename", "")))
         self.file_rev_label.setText(str(getattr(self.ibis_model, "revision", "")))
         self.ibis_ver_label.setText(str(getattr(self.ibis_model, "version", "")))
@@ -295,12 +308,14 @@ class IBISModelSelector(QDialog):
         self._update_component_fields()
 
     def _connect_signals(self):
+        """Connect the signals for the IBIS Model Selector."""
         self.comp_combo.currentTextChanged.connect(self._on_component_changed)
         self.pin_combo.currentTextChanged.connect(self._on_pin_changed)
         self.model_combo.currentTextChanged.connect(self._on_model_changed)
         self.view_model_button.clicked.connect(self._on_view_model_clicked)
 
     def _on_component_changed(self, comp_name):
+        """Update the pins and models when the component changes."""
         if comp_name in self.ibis_model.components:
             setattr(self.ibis_model, "current_component", comp_name)
             self._update_pins()
@@ -308,21 +323,25 @@ class IBISModelSelector(QDialog):
             self._update_component_fields()
 
     def _on_pin_changed(self, pin_name):
+        """Update the models when the pin changes."""
         if pin_name in self.ibis_model.pins:
             setattr(self.ibis_model, "current_pin", pin_name)
             self._update_models()
 
     def _on_model_changed(self, model_name):
+        """Update the current model when the model changes."""
         if model_name and model_name != "Select model...":
             try:
                 setattr(self.ibis_model, "current_model", model_name)
-            except Exception:
+            except AttributeError:
                 pass
 
     def _on_view_model_clicked(self):
+        """Open the IBIS Model View GUI."""
         self.ibis_model.current_model.gui()
 
     def _update_pins(self):
+        """Update the pins for the IBIS Model Selector."""
         pins = list(self.ibis_model.pins.keys())
         self.pin_combo.blockSignals(True)
         self.pin_combo.clear()
@@ -331,6 +350,7 @@ class IBISModelSelector(QDialog):
         self.pin_combo.blockSignals(False)
 
     def _update_models(self):
+        """Update the models for the IBIS Model Selector."""
         model_names = self.ibis_model.get_models(self.ibis_model.current_pin.model_name)
         self.model_combo.blockSignals(True)
         self.model_combo.clear()
@@ -341,6 +361,7 @@ class IBISModelSelector(QDialog):
         self.model_combo.blockSignals(False)
 
     def _update_component_fields(self):
+        """Update the component fields for the IBIS Model Selector."""
         comp = self.ibis_model.current_component
         self.manufacturer_label.setText(str(getattr(comp, "manufacturer", "")))
         self.package_label.setText(str(getattr(comp, "package", "")))

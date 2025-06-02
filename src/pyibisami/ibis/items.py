@@ -14,7 +14,7 @@ import platform
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 
@@ -23,12 +23,18 @@ from pyibisami.ibis.gui import IBISModelView
 
 @dataclass
 class Pin:
+    """Encapsulation of a particular pin from an IBIS model file."""
+
     name: str = ""
     model_name: str = ""
     rlc_pin: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
     @classmethod
     def from_tuple(cls, name: str, pin: tuple[str, tuple[float, float, float]]):
+        """Create a Pin object from a tuple of (name, (model_name, (r, l, c))).
+
+        A pin may not have rlc values which it should then default to the package rlc.
+        """
         return cls(
             name=name,
             model_name=pin[0],
@@ -38,6 +44,8 @@ class Pin:
 
 @dataclass
 class Package:
+    """Encapsulation of a package from an IBIS model file."""
+
     resistance: float = 0.0
     capacitance: float = 0.0
     inductance: float = 0.0
@@ -58,6 +66,15 @@ class Component:
 
     @classmethod
     def from_dict(cls, name: str, component: dict):
+        """Create a Component object from a dictionary.
+
+        Args:
+            name (str): The name of the component.
+            component (dict): The dictionary containing the component data.
+
+        Returns:
+            Component: A Component object.
+        """
         return cls(
             name=name,
             manufacturer=component.get("manufacturer", ""),
@@ -71,6 +88,11 @@ class Component:
             diff_pins=component.get("diff_pin", {}),
         )
 
+    @property
+    def pkg_rlc(self):
+        """Return the package RLC values."""
+        return self.package.resistance, self.package.inductance, self.package.capacitance
+
 
 @dataclass
 class Model:
@@ -79,6 +101,8 @@ class Model:
     Depending on the model type, some of the attributes may be None since only some are required
     depending on the which ones are set.
     """
+
+    # pylint: disable=too-many-instance-attributes
 
     name: str
     model_type: str
@@ -102,11 +126,21 @@ class Model:
     _dll_file: Optional[Path] = field(init=False, default=None)
 
     def __post_init__(self):
+        """Generate the plot data and get the appropriate AMI and DLL files based off the user operating system."""
         self._plot_data = self.__process_model()
         self._ami_file, self._dll_file = self.get_algorithmic_model_for_operating_system(self.algorithmic_model)
 
     @classmethod
     def from_dict(cls, name: str, model: dict):
+        """Create a Model object from a dictionary.
+
+        Args:
+            name (str): The name of the model.
+            model (dict): The dictionary containing the model data.
+
+        Returns:
+            Model: A Model object.
+        """
         return cls(
             name=name,
             model_type=model.get("model_type", ""),
@@ -126,11 +160,13 @@ class Model:
         )
 
     def gui(self):
+        """Open the IBIS Model View GUI."""
         gui = IBISModelView(self)
         gui.exec()
 
     def __process_model(self):
-        # Infer impedance and/or rise/fall time, as per model type.
+        """Infer impedance and/or rise/fall time, as per model type."""
+        # pylint: disable=too-many-locals
         mtype = self.model_type.lower()
         plotdata = {}
         if mtype in ("output", "i/o"):

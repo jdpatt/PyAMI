@@ -1,7 +1,10 @@
-from pyibisami.common    import Rvec
-import numpy as np
+"""Utility functions for pyibisami."""
 
-from scipy.linalg       import convolution_matrix, lstsq
+import numpy as np
+from scipy.linalg import convolution_matrix, lstsq
+
+from pyibisami.common import Rvec
+
 
 def deconv_same(y: Rvec, x: Rvec) -> Rvec:
     """
@@ -17,6 +20,7 @@ def deconv_same(y: Rvec, x: Rvec) -> Rvec:
     A = convolution_matrix(x, len(y), "same")
     h, _, _, _ = lstsq(A, y)
     return h
+
 
 def loadWave(filename: str) -> tuple[Rvec, Rvec]:
     """

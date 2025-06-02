@@ -9,6 +9,7 @@ Original Date:   3 July 2012
 Copyright (c) 2012 by David Banas; All rights reserved World wide.
 """
 
+from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _get_version
 
 from .ibis import IBISModel
@@ -18,7 +19,7 @@ __all__ = ["IBISModel"]
 # Set PEP396 version attribute
 try:
     __version__ = _get_version("PyIBIS-AMI")
-except Exception as err:  # pylint: disable=broad-exception-caught
+except PackageNotFoundError as err:
     __version__ = f"{err} (dev)"
 
 __date__ = "October 12, 2023"

@@ -29,7 +29,7 @@ def get_ibis_files():
 
 @pytest.mark.skipif(not get_ibis_files(), reason="Either PYIBISAMI_TEST_DIR is not set or no IBIS files were found")
 @pytest.mark.parametrize("ibis_file", get_ibis_files())
-def test_external_ibis_files(monkeypatch, ibis_file):
+def test_external_ibis_files(monkeypatch, qtbot, ibis_file):
     """Test IBIS file parsing and model creation.
 
     If we find a matching AMI file, we check that the IBIS model's AMI file and it's model are generated correctly.

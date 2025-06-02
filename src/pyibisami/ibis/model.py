@@ -11,7 +11,6 @@ Copyright (c) 2019 by David Banas; All rights reserved World wide.
 """
 
 import logging
-from functools import cached_property
 from pathlib import Path
 
 from pyibisami.ibis.gui import IBISModelSelector
@@ -49,6 +48,8 @@ class IBISModel:
         models (dict): The dictionary of models in the IBIS file.
         model_selectors (dict): The dictionary of model selectors in the IBIS file.
     """
+
+    # pylint: disable=too-many-instance-attributes, too-many-arguments, too-many-positional-arguments
 
     def __init__(
         self,
@@ -195,10 +196,11 @@ class IBISModel:
         """Present a customized GUI to the user, for model selection, etc."""
         gui = IBISModelSelector(self)
 
-        if get_handle:
+        if get_handle:  # Used for testing so we can get the handle to the GUI without opening the Dialog.
             return gui
-        else:
-            gui.exec()
+
+        gui.exec()
+        return None
 
     @property
     def current_component(self) -> Component:
@@ -237,16 +239,33 @@ class IBISModel:
 
     @property
     def ami_file(self) -> Path:
+        """Return the AMI file path.
+
+        AMI files are relative to the ibis file in the .ibs definition.  Join with the parent directory of the ibis file.
+        """
         if self.current_model.ami_file:
             return self.filepath.parent / self.current_model.ami_file
         return None
 
     @property
     def dll_file(self) -> Path:
+        """Return the DLL file path.
+
+        DLL files are relative to the ibis file in the .ibs definition.  Join with the parent directory of the ibis file.
+        """
         if self.current_model.dll_file:
             return self.filepath.parent / self.current_model.dll_file
         return None
 
     @property
+    def has_algorithmic_model(self) -> bool:
+        """Return True if the model has an algorithmic model."""
+        return True if self.current_model.ami_file and self.current_model.dll_file else False
+
+    @property
     def pin_rlcs(self) -> tuple[float, float, float]:
-        return self.current_pin.rlc_pin
+        """Return the RLC values for the pin, if the values are 0, return the package RLC values."""
+        pin_rlc = self.current_pin.rlc_pin
+        if all(val == 0 for val in pin_rlc.values()):
+            return self.current_component.pkg_rlc
+        return pin_rlc

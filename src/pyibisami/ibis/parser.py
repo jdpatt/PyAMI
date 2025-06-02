@@ -48,13 +48,9 @@ RE_NUMBER = re.compile(r"[-+]?[0-9]*\.?[0-9]+(([eE][-+]?[0-9]+)|([TknGmpMuf][a-z
 class IBISFileParsingError(Exception):
     """Exception raised for errors in IBIS file parsing."""
 
-    pass
-
 
 class MalformedIBISFileError(Exception):
     """Exception raised for errors in IBIS file parsing."""
-
-    pass
 
 
 # Parser Definitions
@@ -526,17 +522,17 @@ def parse_ibis_string(ibis_string: str) -> dict:
     return kw_dict
 
 
-def parse_ibis_file(ibis_file: str | Path) -> dict:
+def parse_ibis_file(ibis_filepath: str | Path) -> dict:
     """Parse the contents of an IBIS file.
 
     Args:
-        ibis_file (str | Path): The name of the IBIS file.
+        ibis_filepath (str | Path): The name of the IBIS file.
     Example:
-        >>> model_dict = parse_ibis_file(ibis_file)
+        >>> model_dict = parse_ibis_file(ibis_filepath)
     Returns:
         model_dict: Dictionary containing keyword definitions (empty upon failure).
     """
-    with open(Path(ibis_file), "r", encoding="utf-8") as file:
+    with open(Path(ibis_filepath), "r", encoding="utf-8") as file:
         return parse_ibis_string(file.read())
 
 
@@ -548,17 +544,23 @@ def validate_ibis_model(model_dict):
     if not model_dict["models"]:
         raise MalformedIBISFileError("This IBIS model has no models!")
 
-    for model in model_dict["models"].values():
-        if model["model_type"] is None:
+    for model_to_validate in model_dict["models"].values():
+        # Checks for any type of model.
+        if model_to_validate["model_type"] is None:
             raise MalformedIBISFileError("This IBIS model has no model type!")
-            if model["model_type"].lower() in ("output", "i/o"):
-                if "pulldown" not in model or "pullup" not in model:
-                    raise MalformedIBISFileError("This IBIS model has no I-V curves!")
-                if "ramp" not in model:
-                    raise MalformedIBISFileError("This IBIS model has no ramp values!")
-            elif model["model_type"].lower() in ("input"):
-                if "gnd_clamp" not in model or "power_clamp" not in model:
-                    raise MalformedIBISFileError("This IBIS model has no clamp values!")
-        if model["voltage_range"] is None:
+        if model_to_validate["voltage_range"] is None:
             raise MalformedIBISFileError("This IBIS model has no voltage range!")
+
+        # Checks for TX models
+        if model_to_validate["model_type"].lower() in ("output", "i/o"):
+            if "pulldown" not in model_to_validate or "pullup" not in model_to_validate:
+                raise MalformedIBISFileError("This IBIS model has no I-V curves!")
+            if "ramp" not in model_to_validate:
+                raise MalformedIBISFileError("This IBIS model has no ramp values!")
+
+        # Checks for RX models
+        elif model_to_validate["model_type"].lower() in ("input"):
+            if "gnd_clamp" not in model_to_validate or "power_clamp" not in model_to_validate:
+                raise MalformedIBISFileError("This IBIS model has no clamp values!")
+
     return model_dict

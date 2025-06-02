@@ -48,6 +48,7 @@ dev = [
     "pytest",
     "pytest-cov",
     "pytest-xdist",
+    "pytest-qt",
     "mypy",
 ]
 
@@ -81,6 +82,9 @@ xfail_strict=true
 
 [tool.pylint.master]
 fail-under = 9.0
+
+[tool.pylint.'MAIN']
+extension-pkg-allow-list = ["PySide6"]
 
 [tool.pylint.messages_control]
 disable = [
