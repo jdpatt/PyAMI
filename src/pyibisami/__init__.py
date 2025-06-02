@@ -11,6 +11,10 @@ Copyright (c) 2012 by David Banas; All rights reserved World wide.
 
 from importlib.metadata import version as _get_version
 
+from .ibis import IBISModel
+
+__all__ = ["IBISModel"]
+
 # Set PEP396 version attribute
 try:
     __version__ = _get_version("PyIBIS-AMI")

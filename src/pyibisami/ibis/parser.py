@@ -10,7 +10,9 @@ https://ibis.org/
 Copyright (c) 2019 by David Banas; All rights reserved World wide.
 """
 
+import logging
 import re
+from pathlib import Path
 
 from parsec import (
     ParseError,
@@ -32,20 +34,38 @@ from parsec import (
     times,
 )
 
-from pyibisami.ibis.model import Component, Model
+logger = logging.getLogger("pyibisami.ibis.parser")
 
-DEBUG = False
+# Compile regex patterns at module level
+RE_WHITESPACE = re.compile(r"\s+", re.MULTILINE)
+RE_COMMENT = re.compile(r"\|.*")  # To end of line only.
+RE_NAME_ONLY = re.compile(r"[_a-zA-Z0-9/\.()#-]+")
+RE_SYMBOL = re.compile(r"[a-zA-Z_][^\s()\[\]]*")
+RE_QUOTED_STRING = re.compile(r'"[^"]*"')
+RE_NUMBER = re.compile(r"[-+]?[0-9]*\.?[0-9]+(([eE][-+]?[0-9]+)|([TknGmpMuf][a-zA-Z]*))?")
+
+
+class IBISFileParsingError(Exception):
+    """Exception raised for errors in IBIS file parsing."""
+
+    pass
+
+
+class MalformedIBISFileError(Exception):
+    """Exception raised for errors in IBIS file parsing."""
+
+    pass
+
 
 # Parser Definitions
-
-whitespace = regex(r"\s+", re.MULTILINE)
-comment    = regex(r"\|.*")                 # To end of line only.
-ignore     = many(whitespace | comment)     # None is okay; so, can be used completely safely.
+whitespace = regex(RE_WHITESPACE)
+comment = regex(RE_COMMENT)
+ignore = many(whitespace | comment)  # None is okay; so, can be used completely safely.
 
 
 def logf(p: Parser, preStr: str = "") -> Parser:
     """
-    Returns parser ``p`` wrapped in a thin shell, which logs any failure at the point of occurence.
+    Returns parser ``p`` wrapped in a thin shell, which logs any failure at the point of occurrence.
 
     Args:
         p: The original parser.
@@ -62,9 +82,12 @@ def logf(p: Parser, preStr: str = "") -> Parser:
     def fn(txt, ix):
         res = p(txt, ix)
         if not res.status:
-            print(
-                f"{preStr}: Expected `{res.expected}` in `{txt[res.index: res.index + 5]}` at {ParseError.loc_info(txt, res.index)}.",
-                flush=True
+            logger.error(
+                "%s: Expected `%s` in `%s` at %s.",
+                preStr,
+                res.expected,
+                txt[res.index : res.index + 5],
+                ParseError.loc_info(txt, res.index),
             )
         return res
 
@@ -82,7 +105,7 @@ def lexeme(p):
 def word(p):
     """Line limited word lexer.
 
-    Only skips space after words; dosen't skip comments or newlines.
+    Only skips space after words; doesn't skip comments or newlines.
     Requires, at least, one white space character after word.
     """
     return p << regex(r"\s+")
@@ -96,12 +119,12 @@ def rest_line():
 
 
 skip_line = lexeme(rest_line).result("(Skipped.)")
-name_only = regex(r"[_a-zA-Z0-9/\.()#-]+")
+name_only = regex(RE_NAME_ONLY)
 name = word(name_only)
-symbol = lexeme(regex(r"[a-zA-Z_][^\s()\[\]]*"))
+symbol = lexeme(regex(RE_SYMBOL))
 true = lexeme(string("True")).result(True)
 false = lexeme(string("False")).result(False)
-quoted_string = lexeme(regex(r'"[^"]*"'))
+quoted_string = lexeme(regex(RE_QUOTED_STRING))
 skip_keyword = (skip_line >> many(none_of("[") >> skip_line)).result(
     "(Skipped.)"
 )  # Skip over everything until the next keyword begins.
@@ -122,7 +145,7 @@ IBIS_num_suf = {
 @generate("number")
 def number():
     "Parse an IBIS numerical value."
-    s = yield (regex(r"[-+]?[0-9]*\.?[0-9]+(([eE][-+]?[0-9]+)|([TknGmpMuf][a-zA-Z]*))?") << many(letter()) << ignore)
+    s = yield (regex(RE_NUMBER) << many(letter()) << ignore)
     m = re.search(r"[^\d]+$", s)
     if m:
         ix = m.start()
@@ -242,19 +265,17 @@ def keyword(kywrd=""):
 
 @generate("IBIS parameter")
 def param():
-    "Parse IBIS parameter."
+    """Parse IBIS parameter."""
     # Parameters must begin with a letter in column 1.
     pname = yield word(regex(r"^[a-zA-Z]\w*", re.MULTILINE))
-    if DEBUG:
-        print(f"Parsing parameter {pname}...", end="", flush=True)
+    logger.debug("Parsing parameter %s...", pname)
     res = yield ((word(string("=")) >> (number | rest_line)) | typminmax | name | rest_line)
-    if DEBUG:
-        print(res, flush=True)
+    logger.debug(res)
     yield ignore  # So that ``param`` functions as a lexeme.
     return (pname.lower(), res)
 
 
-def node(valid_keywords, stop_keywords, debug=False):
+def node(valid_keywords, stop_keywords):
     """Build a node-specific parser.
 
     Args:
@@ -279,8 +300,7 @@ def node(valid_keywords, stop_keywords, debug=False):
         "Parse keyword syntax."
         nm = yield keyword()
         nmL = nm.lower()
-        if debug:
-            print(f"Parsing keyword: [{nm}]...", flush=True)
+        logger.debug("Parsing keyword: [{%s}]...", nm)
         if nmL in valid_keywords:
             if nmL == "end":  # Because ``ibis_file`` expects this to be the last thing it sees,
                 return fail_with("")  # we can't consume it here.
@@ -290,8 +310,7 @@ def node(valid_keywords, stop_keywords, debug=False):
         else:
             res = yield skip_keyword
         yield ignore  # So that ``kywrd`` behaves as a lexeme.
-        if debug:
-            print(f"Finished parsing keyword: [{nm}].", flush=True)
+        logger.debug("Finished parsing keyword: [{%s}].", nm)
         return (nmL, res)
 
     return kywrd | param
@@ -303,7 +322,7 @@ def node(valid_keywords, stop_keywords, debug=False):
 # [End]
 @generate("[End]")
 def end():
-    "Parse [End]."
+    """Parse [End]."""
     yield keyword("End")
     return eof
 
@@ -311,7 +330,7 @@ def end():
 # [Model]
 @generate("[Ramp]")
 def ramp():
-    "Parse [Ramp]."
+    """Parse [Ramp]."""
     lines = yield count(ramp_line, 2).desc("Two ramp_lines")
     return dict(lines)  # .update(dict(params))
 
@@ -330,15 +349,13 @@ Model_keywords = {
 
 @generate("[Model]")
 def model():
-    "Parse [Model]."
+    """Parse [Model]."""
     nm = yield name << ignore
-    if DEBUG:
-        print(f"Parsing model: {nm}...", flush=True)
-    res = yield many1(node(Model_keywords, IBIS_keywords, debug=DEBUG))
-    if DEBUG:
-        print(f"[Model] {nm} contains: {dict(res).keys()}", flush=True)
+    logger.debug("Parsing model: %s...", nm)
+    res = yield many1(node(Model_keywords, IBIS_keywords))
+    logger.debug("[Model] %s contains: %s", nm, dict(res).keys())
     try:
-        theModel = Model(dict(res))
+        theModel = dict(res)
     except LookupError as le:
         return fail_with(f"[Model] {nm}: {str(le)}")
     return {nm: theModel}
@@ -350,19 +367,18 @@ rlc = lexeme(string("R_pin") | string("L_pin") | string("C_pin"))
 
 @generate("[Package]")
 def package():
-    "Parse package RLC values."
+    """Parse package RLC values."""
     rlcs = yield many1(param)
-    if DEBUG:
-        print(f"rlcs: {rlcs}", flush=True)
+    logger.debug("rlcs: %s", rlcs)
     return dict(rlcs)
 
 
 def pin(rlcs):
-    "Parse indiviual component pin."
+    """Parse individual component pin."""
 
     @generate("Component Pin")
     def fn():
-        "Parse an individual component pin."
+        """Parse an individual component pin."""
         [nm, sig] = yield count(name, 2)
         mod = yield name_only
         rem_line = yield rest_line
@@ -377,7 +393,7 @@ def pin(rlcs):
 
 @generate("[Component].[Pin]")
 def pins():
-    "Parse [Component].[Pin]."
+    """Parse [Component].[Pin]."""
 
     def filt(x):
         (_, (mod, _)) = x
@@ -401,23 +417,22 @@ Component_keywords = {
 
 @generate("[Component]")
 def comp():
-    "Parse [Component]."
+    """Parse [Component]."""
     nm = yield lexeme(name)
-    if DEBUG:
-        print(f"Parsing component: {nm}", flush=True)
-    res = yield many1(node(Component_keywords, IBIS_keywords, debug=DEBUG))
+    logger.debug("Parsing component: %s", nm)
+    res = yield many1(node(Component_keywords, IBIS_keywords))
     try:
-        Component(dict(res))
+        component = dict(res)
     except LookupError as le:
         return fail_with(f"[Component] {nm}: {str(le)}")
     except Exception as err:  # pylint: disable=broad-exception-caught
         return fail_with(f"[Component] {nm}: {str(err)}")
-    return {nm: Component(dict(res))}
+    return {nm: component}
 
 
 @generate("[Model Selector]")
 def modsel():
-    "Parse [Model Selector]."
+    """Parse [Model Selector]."""
     nm = yield name
     res = yield ignore >> many1(name + rest_line)
     return {nm: res}
@@ -464,43 +479,26 @@ IBIS_kywrd_parsers.update(
 
 @generate("IBIS File")
 def ibis_file():
-    "Parse IBIS file."
-    res = yield ignore >> many1True(node(IBIS_kywrd_parsers, {}, debug=DEBUG)) << end
+    """Parse IBIS file."""
+    res = yield ignore >> many1True(node(IBIS_kywrd_parsers, {})) << end
     return res
 
 
-def parse_ibis_file(ibis_file_contents_str, debug=False):
-    """Parse the contents of an IBIS file.
+def parse_ibis_string(ibis_string: str) -> dict:
+    """Parse the contents of an IBIS string into a dictionary.
 
     Args:
-        ibis_file_contents_str (str): The contents of the IBIS file, as a single string.
-
-    Keyword Args:
-        debug (bool): Output debugging info to console when true.
-            Default = False
-
-    Example:
-        ::
-
-            with open(<ibis_file_name>) as ibis_file:
-                ibis_file_contents_str = ibis_file.read()
-                (err_str, model_dict)  = parse_ibis_file(ibis_file_contents_str)
+        ibis_string (str): The contents of an IBIS file.
 
     Returns:
-        (str, dict): A pair containing:
-
-            err_str:
-                A message describing the nature of any parse failure that occured.
-            model_dict:
-                Dictionary containing keyword definitions (empty upon failure).
+        model_dict: Dictionary containing keyword definitions (empty upon failure).
     """
-
     try:
-        nodes = ibis_file.parse_strict(ibis_file_contents_str)  # Parse must consume the entire file.
-        if debug:
-            print("Parsed nodes:\n", nodes, flush=True)
+        nodes = ibis_file.parse_strict(ibis_string)  # Parse must consume the entire file.
+        logger.debug("Parsed nodes:\n%s", nodes)
     except ParseError as pe:
-        return str(pe), {}
+        logger.warning("IBIS parsing errors/warnings: %s", str(pe))
+        raise IBISFileParsingError(f"IBIS parsing errors/warnings: {str(pe)}") from pe
 
     kw_dict = {}
     components = {}
@@ -515,6 +513,7 @@ def parse_ibis_file(ibis_file_contents_str, debug=False):
             model_selectors.update(val)
         else:
             kw_dict.update({kw: val})
+
     kw_dict.update(
         {
             "components": components,
@@ -522,4 +521,44 @@ def parse_ibis_file(ibis_file_contents_str, debug=False):
             "model_selectors": model_selectors,
         }
     )
-    return "Success!", kw_dict
+
+    validate_ibis_model(kw_dict)
+    return kw_dict
+
+
+def parse_ibis_file(ibis_file: str | Path) -> dict:
+    """Parse the contents of an IBIS file.
+
+    Args:
+        ibis_file (str | Path): The name of the IBIS file.
+    Example:
+        >>> model_dict = parse_ibis_file(ibis_file)
+    Returns:
+        model_dict: Dictionary containing keyword definitions (empty upon failure).
+    """
+    with open(Path(ibis_file), "r", encoding="utf-8") as file:
+        return parse_ibis_string(file.read())
+
+
+def validate_ibis_model(model_dict):
+    """Validate the IBIS model has all the required keywords for a PyBERT simulation to run."""
+    logger.debug("Validating IBIS model:\n%s", model_dict)
+    if not model_dict["components"]:
+        raise MalformedIBISFileError("This IBIS model has no components!")
+    if not model_dict["models"]:
+        raise MalformedIBISFileError("This IBIS model has no models!")
+
+    for model in model_dict["models"].values():
+        if model["model_type"] is None:
+            raise MalformedIBISFileError("This IBIS model has no model type!")
+            if model["model_type"].lower() in ("output", "i/o"):
+                if "pulldown" not in model or "pullup" not in model:
+                    raise MalformedIBISFileError("This IBIS model has no I-V curves!")
+                if "ramp" not in model:
+                    raise MalformedIBISFileError("This IBIS model has no ramp values!")
+            elif model["model_type"].lower() in ("input"):
+                if "gnd_clamp" not in model or "power_clamp" not in model:
+                    raise MalformedIBISFileError("This IBIS model has no clamp values!")
+        if model["voltage_range"] is None:
+            raise MalformedIBISFileError("This IBIS model has no voltage range!")
+    return model_dict

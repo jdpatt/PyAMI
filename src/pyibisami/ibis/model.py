@@ -7,319 +7,246 @@ Original Date:   November 1, 2019
 For information regarding the IBIS modeling standard, visit:
 https://ibis.org/
 
-**Note:** The ``IBISModel`` class, defined here, needs to be kept separate from the
-other IBIS-related classes, defined in the ``model`` module, in order to
-avoid circular imports.
-
 Copyright (c) 2019 by David Banas; All rights reserved World wide.
 """
 
-import platform
-from datetime import datetime
+import logging
+from functools import cached_property
+from pathlib import Path
 
-from traits.api import (
-    Any,
-    Dict,
-    Enum,
-    Float,
-    HasTraits,
-    List,
-    Property,
-    String,
-    Trait,
-    cached_property,
-)
-from traitsui.api import HGroup, Item, ModalButtons, VGroup, View, spring
-from traitsui.message import message
+from pyibisami.ibis.gui import IBISModelSelector
+from pyibisami.ibis.items import Component, Model, Pin
+from pyibisami.ibis.parser import parse_ibis_file, parse_ibis_string
 
-from pyibisami.ibis.parser import parse_ibis_file
+logger = logging.getLogger("pyibisami.ibis")
 
 
-class IBISModel(HasTraits):  # pylint: disable=too-many-instance-attributes
-    """HasTraits subclass for wrapping and interacting with an IBIS model.
+class IBISModel:
+    """Dataclass for wrapping and interacting with an IBIS model.
 
     This class can be configured to present a customized GUI to the user
     for interacting with a particular IBIS model (i.e. - selecting components,
     pins, and models).
 
-    The intended use model is as follows:
+    The intended use of this class is as follows:
 
      1. Instantiate this class only once per IBIS model file.
-        When instantiating, provide the unprocessed contents of the IBIS
-        file, as a single string. This class will take care of getting
-        that string parsed properly, and report any errors or warnings
-        it encounters, in its ``ibis_parsing_errors`` property.
+        When instantiating from one of the class methods, you can provide either the unprocessed
+        contents of the IBIS file, as a single string, or the string path of the IBIS file.
+        Those methods will take care of getting it parsed and log any errors or warnings.
 
      2. When you want to let the user select a particular component/pin/model,
-        call the newly created instance, as if it were a function, passing
-        no arguments.
-        The instance will then present a GUI to the user,
-        allowing him to select a particular component/pin/model, which may then
-        be retrieved, via the ``model`` property.
-        The latest user selections will be remembered,
-        as long as the instance remains in scope.
+        open the GUI by calling the ``gui()`` method.
 
-    Any errors or warnings encountered while parsing are available, in
-    the ``ibis_parsing_errors`` property.
-
-    The complete dictionary containing all parsed models may be retrieved,
-    via the ``model_dict`` property.
+    Args:
+        name (str): The name of the IBIS model.
+        filepath (Path): The path to the IBIS file.
+        is_tx (bool): True if this is a Tx model.
+        version (float): The version of the IBIS file.
+        revision (str): The revision of the IBIS file.
+        date (str): The date of the IBIS file.
+        components (dict): The dictionary of components in the IBIS file.
+        models (dict): The dictionary of models in the IBIS file.
+        model_selectors (dict): The dictionary of model selectors in the IBIS file.
     """
 
-    _log = ""
+    def __init__(
+        self,
+        filepath: Path,
+        is_tx: bool,
+        version: float,
+        revision: str,
+        date: str,
+        components: dict[str, Component],
+        models: dict[str, Model],
+        model_selectors: dict[str, list[str]],
+        name: str | None = None,
+    ):
+        self.name: str = name or filepath.stem
+        self.filepath: Path = filepath
+        self.is_tx: bool = is_tx
+        self.version: float = version
+        self.revision: str = revision
+        self.date: str = date
 
-    pin_ = Property(Any, depends_on=["pin"])
-    pin_rlcs = Property(Dict, depends_on=["pin"])
-    model = Property(Any, depends_on=["mod"])
-    pins = List  # Always holds the list of valid pin selections, given a component selection.
-    models = List  # Always holds the list of valid model selections, given a pin selection.
+        # The dictionary of components and models in the IBIS file.
+        self.components: dict[str, Component] = components
+        self._current_component: str = next(iter(self.components))
 
-    def get_models(self, mname):
-        """Return the list of models associated with a particular name."""
-        model_dict = self._model_dict
-        if "model_selectors" in model_dict and mname in model_dict["model_selectors"]:
-            return list(map(lambda pr: pr[0], model_dict["model_selectors"][mname]))
-        return [mname]
+        self.pins: dict[str, Pin] = self.components[self._current_component].pins
+        self._current_pin: str = next(iter(self.pins))
+
+        self.models: dict[str, Model] = models
+        self.model_selectors: dict[str, list[str]] = model_selectors
+        self._current_model: str = self.get_models(self.current_pin.model_name)[0]
+
+    @classmethod
+    def from_file(cls, filepath: str | Path, is_tx: bool):
+        """Initialize the IBISModel from a file.
+
+        Args:
+            filename (str): The string path of the IBIS file.
+            is_tx (bool): True if this is a Tx model.
+        """
+        filepath = Path(filepath)
+        logger.info("IBISModel initializing from %s...", filepath)
+        model_dict = parse_ibis_file(filepath)  # Parse the IBIS file contents and validate it.
+        instance = cls(
+            filepath=filepath,
+            is_tx=is_tx,
+            version=float(model_dict["ibis_ver"]),
+            revision=model_dict["file_rev"],
+            date=model_dict["date"],
+            components={
+                name: Component.from_dict(name, component) for name, component in model_dict["components"].items()
+            },
+            models={name: Model.from_dict(name, model) for name, model in model_dict["models"].items()},
+            model_selectors=model_dict.get("model_selectors", {}),
+            name=model_dict["file_name"],
+        )
+        logger.debug("Finished initializing IBISModel.")
+        return instance
+
+    @classmethod
+    def from_string(cls, ibis_string: str, is_tx: bool):
+        """Initialize the IBISModel from a string.
+
+        Args:
+            ibis_string (str): The unprocessed contents of the IBIS file.
+            is_tx (bool): True if this is a Tx model.
+        """
+        model_dict = parse_ibis_string(ibis_string)  # Parse the IBIS file contents and validate it.
+        return cls(
+            filepath=Path(model_dict["file_name"]),  # Name will also be set to file_name
+            is_tx=is_tx,
+            version=float(model_dict["ibis_ver"]),
+            revision=model_dict["file_rev"],
+            date=model_dict["date"],
+            components={
+                name: Component.from_dict(name, component) for name, component in model_dict["components"].items()
+            },
+            models={name: Model.from_dict(name, model) for name, model in model_dict["models"].items()},
+            model_selectors=model_dict.get("model_selectors", {}),
+        )
+
+    @classmethod
+    def from_dict(cls, model_dict: dict, is_tx: bool):
+        """Initialize the IBISModel from a dictionary.
+
+        Args:
+            model_dict (dict): The dictionary of model information.
+            is_tx (bool): True if this is a Tx model.
+        """
+        return cls(
+            filepath=Path(model_dict["file_name"]),  # Name will also be set to file_name
+            is_tx=is_tx,
+            version=float(model_dict["ibis_ver"]),
+            revision=model_dict["file_rev"],
+            date=model_dict["date"],
+            components={
+                name: Component.from_dict(name, component) for name, component in model_dict["components"].items()
+            },
+            models={name: Model.from_dict(name, model) for name, model in model_dict["models"].items()},
+            model_selectors=model_dict.get("model_selectors", {}),
+        )
+
+    def get_models(self, model_name: str) -> list[str]:
+        """Return the list of models associated with a particular name.
+
+        IBIS models can either directly assign a model name in the pin definition or it can reference a model
+        selector which allows a pin to have multiple options for the model.
+
+        Args:
+            model_name (str): The name of the model to get the list of models for.
+
+        Returns:
+            list[str]: The list of models associated with the model name.
+
+        """
+        if self.model_selectors and model_name in self.model_selectors:
+            return [model[0] for model in self.model_selectors[model_name]]  # There was a model selector
+        return [model_name]  # The pin directly references a model
 
     def get_pins(self):
-        """Get the list of appropriate pins, given our type (i.e. - Tx or Rx)."""
-        pins = self.comp_.pins
+        """Get the list of appropriate pins, given our type (i.e. - Tx or Rx).
 
-        def pin_ok(pname):
-            (mname, _) = pins[pname]
-            mods = self.get_models(mname)
-            mod = self._models[mods[0]]
-            mod_type = mod.mtype.lower()
-            tx_ok = mod_type in ("output", "i/o")
-            if self._is_tx:
-                return tx_ok
-            return not tx_ok
-
-        return list(filter(pin_ok, list(pins)))
-
-    def __init__(self, ibis_file_name, is_tx, debug=False, gui=True):
+        Returns:
+            list[str]: List of pin names that match the model type (Tx or Rx)
         """
-        Args:
-            ibis_file_name (str): The name of the IBIS file.
-            is_tx (bool): True if this is a Tx model.
+        valid_pins = []
+        for pin in self.current_component.pins.values():
+            # Get all possible models for this pin
+            model_names = self.get_models(pin.model_name)
+            model = self.models[
+                model_names[0]
+            ]  # Get first model to check type; can assume all models are the same type
 
-        Keyword Args:
-            debug (bool): Output debugging info to console when true.
-                Default = False
-            gui (bool): Set to `False` for command line and/or script usage.
-                Default = True.
-        """
+            # Check if model type matches is_tx flag
+            model_type = model.model_type.lower()
+            if self.is_tx:
+                if model_type in ("output", "i/o"):
+                    valid_pins.append(pin.name)
+            else:
+                valid_pins.append(pin.name)
 
-        # Super-class initialization is ABSOLUTELY NECESSARY, in order
-        # to get all the Traits/UI machinery setup correctly.
-        super().__init__()
+        return valid_pins
 
-        self.debug = debug
-        self.GUI = gui
-        if debug:
-            self.log("pyibisami.ibis_file.IBISModel initializing in debug mode...")
-        else:
-            self.log("pyibisami.ibis_file.IBISModel initializing in non-debug mode...")
-
-        # Parse the IBIS file contents, storing any errors or warnings, and validate it.
-        with open(ibis_file_name, "r", encoding="utf-8") as file:
-            ibis_file_contents_str = file.read()
-        err_str, model_dict = parse_ibis_file(ibis_file_contents_str, debug=debug)
-        self.log("IBIS parsing errors/warnings:\n" + err_str)
-        if "components" not in model_dict or not model_dict["components"]:
-            print(f":\n{model_dict}", flush=True)
-            raise ValueError("This IBIS model has no components!")
-        components = model_dict["components"]
-        if "models" not in model_dict or not model_dict["models"]:
-            raise ValueError("This IBIS model has no models!")
-        models = model_dict["models"]
-        self._model_dict = model_dict
-        self._models = models
-        self._is_tx = is_tx
-
-        # Add Traits for various attributes found in the IBIS file.
-        self.add_trait("comp", Trait(list(components)[0], components))  # Doesn't need a custom mapper, because
-        self.pins = self.get_pins()  # the thing above it (file) can't change.
-        self.add_trait("pin", Enum(self.pins[0], values="pins"))
-        (mname, _) = self.pin_
-        self.models = self.get_models(mname)
-        self.add_trait("mod", Enum(self.models[0], values="models"))
-        self.add_trait("ibis_ver", Float(model_dict["ibis_ver"]))
-        self.add_trait("file_name", String(model_dict["file_name"]))
-        self.add_trait("file_rev", String(model_dict["file_rev"]))
-        if "date" in model_dict:
-            self.add_trait("date", String(model_dict["date"]))
-        else:
-            self.add_trait("date", String("(n/a)"))
-
-        self._ibis_parsing_errors = err_str
-        self._os_type = platform.system()  # These 2 are used, to choose
-        self._os_bits = platform.architecture()[0]  # the correct AMI executable.
-
-        self._comp_changed(list(components)[0])  # Wasn't being called automatically.
-        self._pin_changed(self.pins[0])  # Wasn't being called automatically.
-
-        self.log("Done.")
-
-    def __str__(self):
-        return f"IBIS Model '{self._model_dict['file_name']}'"
-
-    def info(self):
-        """Basic information about the IBIS model."""
-        res = ""
-        try:
-            for k in ["ibis_ver", "file_name", "file_rev"]:
-                res += k + ":\t" + str(self._model_dict[k]) + "\n"
-        except Exception as err:
-            print(f"{err}")
-            print(self._model_dict)
-            raise
-        res += "date" + ":\t\t" + str(self._model_dict["date"]) + "\n"
-        res += "\nComponents:"
-        res += "\n=========="
-        for c in list(self._model_dict["components"]):
-            res += "\n" + c + ":\n" + "---\n" + str(self._model_dict["components"][c]) + "\n"
-        res += "\nModel Selectors:"
-        res += "\n===============\n"
-        for s in list(self._model_dict["model_selectors"]):
-            res += f"{s}\n"
-        res += "\nModels:"
-        res += "\n======"
-        for m in list(self._model_dict["models"]):
-            res += "\n" + m + ":\n" + "---\n" + str(self._model_dict["models"][m])
-        return res
-
-    def __call__(self):
+    def gui(self, get_handle: bool = False) -> IBISModelSelector | None:
         """Present a customized GUI to the user, for model selection, etc."""
-        self.edit_traits(kind="livemodal")
+        gui = IBISModelSelector(self)
 
-    # Logger & Pop-up
-    def log(self, msg, alert=False):
-        """Log a message to the console and, optionally, to terminal and/or
-        pop-up dialog."""
-        _msg = msg.strip()
-        txt = f"\n[{datetime.now()}]: IBISModel: {_msg}\n"
-        self._log += txt
-        if self.debug:
-            print(txt, flush=True)
-        if alert and self.GUI:
-            message(_msg, "PyAMI Alert")
-
-    def default_traits_view(self):
-        "Default Traits/UI view definition."
-        view = View(
-            VGroup(
-                HGroup(
-                    Item("file_name", label="File name", style="readonly"),
-                    spring,
-                    Item("file_rev", label="rev", style="readonly"),
-                ),
-                HGroup(
-                    Item("ibis_ver", label="IBIS ver", style="readonly"),
-                    spring,
-                    Item("date", label="Date", style="readonly"),
-                ),
-                HGroup(
-                    Item("comp", label="Component"),
-                    Item("pin", label="Pin"),
-                    Item("mod", label="Model"),
-                ),
-            ),
-            resizable=False,
-            buttons=ModalButtons,
-            title="PyBERT IBIS Model Selector",
-            id="pybert.pybert_ami.model_selector",
-        )
-        return view
-
-    @cached_property
-    def _get_pin_(self):
-        return self.comp_.pins[self.pin]
-
-    @cached_property
-    def _get_pin_rlcs(self):
-        (_, pin_rlcs) = self.pin_
-        return pin_rlcs
-
-    @cached_property
-    def _get_model(self):
-        return self._models[self.mod]
-
-    @property
-    def ibis_parsing_errors(self):
-        """Any errors or warnings encountered, while parsing the IBIS file
-        contents."""
-        return self._ibis_parsing_errors
-
-    @property
-    def log_txt(self):
-        """The complete log since instantiation."""
-        return self._log
-
-    @property
-    def model_dict(self):
-        "Dictionary of all model keywords."
-        return self._model_dict
-
-    @property
-    def dll_file(self):
-        "Shared object file."
-        return self._dll_file
-
-    @property
-    def ami_file(self):
-        "AMI file."
-        return self._ami_file
-
-    def _comp_changed(self, new_value):
-        del new_value
-        self.pins = self.get_pins()
-        self.pin = self.pins[0]
-
-    def _pin_changed(self, new_value):
-        # (mname, rlc_dict) = self.pin_  # Doesn't work. Because ``pin_`` is a cached property and hasn't yet been marked "dirty"?
-        (mname, _) = self.comp_.pins[new_value]
-        self.models = self.get_models(mname)
-        self.mod = self.models[0]
-
-    def _mod_changed(self, new_value):
-        model = self._models[new_value]
-        os_type = self._os_type
-        os_bits = self._os_bits
-        fnames = []
-        dll_file = ""
-        ami_file = ""
-        if os_type.lower() == "windows":
-            if os_bits == "64bit":
-                fnames = model._exec64Wins  # pylint: disable=protected-access
-            else:
-                fnames = model._exec32Wins  # pylint: disable=protected-access
+        if get_handle:
+            return gui
         else:
-            if os_bits == "64bit":
-                fnames = model._exec64Lins  # pylint: disable=protected-access
-            else:
-                fnames = model._exec32Lins  # pylint: disable=protected-access
-        if fnames:
-            dll_file = fnames[0]
-            ami_file = fnames[1]
-            self.log(
-                "There was an [Algorithmic Model] keyword in this model.\n \
-If you wish to use the AMI model associated with this IBIS model,\n \
-please, go the 'Equalization' tab and enable it now.",
-                alert=True,
-            )
-        elif "algorithmic_model" in model._subDict:  # pylint: disable=protected-access
-            self.log(
-                f"There was an [Algorithmic Model] keyword for this model,\n \
-but no executable for your platform: {os_type}-{os_bits};\n \
-PyBERT native equalization modeling being used instead.",
-                alert=True,
-            )
-        else:
-            self.log(
-                "There was no [Algorithmic Model] keyword for this model;\n \
-PyBERT native equalization modeling being used instead.",
-                alert=True,
-            )
-        self._dll_file = dll_file  # pylint: disable=attribute-defined-outside-init
-        self._ami_file = ami_file  # pylint: disable=attribute-defined-outside-init
+            gui.exec()
+
+    @property
+    def current_component(self) -> Component:
+        """Return the current component object."""
+        return self.components[self._current_component]
+
+    @current_component.setter
+    def current_component(self, value: str):
+        """Set the current component and update the pins and current pin to the first pin in the component."""
+        self._current_component = value
+        self.pins = self.current_component.pins
+        self.current_pin = next(iter(self.pins))
+
+    @property
+    def current_model(self) -> Model:
+        """Return the current model object."""
+        return self.models[self._current_model]
+
+    @current_model.setter
+    def current_model(self, value: str):
+        """Set the current model"""
+        if value not in self.models:
+            raise ValueError(f"Model {value} not found in models")
+        self._current_model = value
+
+    @property
+    def current_pin(self) -> Pin:
+        """Return the current pin object."""
+        return self.pins[self._current_pin]
+
+    @current_pin.setter
+    def current_pin(self, value: str):
+        """Set the current pin and update the current model to the first model in the pin."""
+        self._current_pin = value
+        self.current_model = self.get_models(self.current_pin.model_name)[0]
+
+    @property
+    def ami_file(self) -> Path:
+        if self.current_model.ami_file:
+            return self.filepath.parent / self.current_model.ami_file
+        return None
+
+    @property
+    def dll_file(self) -> Path:
+        if self.current_model.dll_file:
+            return self.filepath.parent / self.current_model.dll_file
+        return None
+
+    @property
+    def pin_rlcs(self) -> tuple[float, float, float]:
+        return self.current_pin.rlc_pin

@@ -4,19 +4,20 @@ repos:
     hooks:
       - id: black
   - repo: https://github.com/pycqa/isort
-    rev: 6.0.0
+    rev: 6.0.1
     hooks:
       - id: isort
         args: ["--profile", "black", "--filter-files"]
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
-      - id: trailing-whitespace
+      # - id: trailing-whitespace # Required to disable because of the templating with em.py
       - id: end-of-file-fixer
       - id: check-added-large-files
       - id: check-ast
       - id: check-json
       - id: check-yaml
+        exclude: meta.yaml
       - id: check-merge-conflict
       - id: debug-statements
       - id: mixed-line-ending

@@ -10,390 +10,256 @@ https://ibis.org/
 Copyright (c) 2019 by David Banas; All rights reserved World wide.
 """
 
+import platform
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
 import numpy as np
-from chaco.api import ArrayPlotData, Plot
-from enable.component_editor import ComponentEditor
-from traits.api import HasTraits, String, Trait
-from traitsui.api import Group, Item, ModalButtons, View
+
+from pyibisami.ibis.gui import IBISModelView
 
 
-class Component(HasTraits):
-    """Encapsulation of a particular component from an IBIS model file."""
+@dataclass
+class Pin:
+    name: str = ""
+    model_name: str = ""
+    rlc_pin: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
-    def __init__(self, subDict):
-        """
-        Args:
-            subDict(dict): Dictionary of [Component] sub-keywords/params.
-        """
+    @classmethod
+    def from_tuple(cls, name: str, pin: tuple[str, tuple[float, float, float]]):
+        return cls(
+            name=name,
+            model_name=pin[0],
+            rlc_pin=pin[1],
+        )
 
-        # Super-class initialization is ABSOLUTELY NECESSARY, in order
-        # to get all the Traits/UI machinery setup correctly.
-        super().__init__()
 
-        # Stash the sub-keywords/parameters.
-        self._subDict = subDict
-
-        # Fetch available keyword/parameter definitions.
-        def maybe(name):
-            return subDict[name] if name in subDict else None
-
-        self._mfr = maybe("manufacturer")
-        self._pkg = maybe("package")
-        self._pins = maybe("pin")
-        self._diffs = maybe("diff_pin")
-
-        # Check for the required keywords.
-        if not self._mfr:
-            raise LookupError("Missing [Manufacturer]!")
-        if not self._pkg:
-            print(self._mfr)
-            raise LookupError("Missing [Package]!")
-        if not self._pins:
-            raise LookupError("Missing [Pin]!")
-
-        # Set up the GUI.
-        self.add_trait("manufacturer", String(self._mfr))
-        self.add_trait("package", String(self._pkg))
-        self.add_trait("_pin", Trait(list(self._pins)[0], self._pins))
-        self._content = [
-            Group(
-                Item("manufacturer", label="Manufacturer", style="readonly"),
-                Item("package", label="Package", style="readonly"),
-                Item("_pin", label="Pin"),
-                label="Component",
-                show_border=True,
-            ),
-        ]
+@dataclass
+class Package:
+    resistance: float = 0.0
+    capacitance: float = 0.0
+    inductance: float = 0.0
 
     def __str__(self):
-        res = "Manufacturer:\t" + self._mfr + "\n"
-        res += "Package:     \t" + str(self._pkg) + "\n"
-        res += "Pins:\n"
-        for pname in self._pins:
-            res += "    " + pname + ":\t" + str(self._pins[pname]) + "\n"
-        return res
+        return f"r_pkg={self.resistance}, c_pkg={self.capacitance}, l_pkg={self.inductance}"
 
-    def __call__(self):
-        self.edit_traits()
 
-    def default_traits_view(self):
-        "Default Traits/UI view definition."
-        view = View(
-            resizable=False,
-            buttons=ModalButtons,
-            title="PyBERT IBIS Component Viewer",
-            id="pyibisami.ibis_parser.Component",
+@dataclass
+class Component:
+    """Encapsulation of a particular component from an IBIS model file."""
+
+    name: str
+    manufacturer: str
+    package: Package
+    pins: Dict[str, Any] = field(default_factory=dict)
+    diff_pins: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, name: str, component: dict):
+        return cls(
+            name=name,
+            manufacturer=component.get("manufacturer", ""),
+            package=Package(
+                resistance=component.get("package", {}).get("r_pkg", 0.0),
+                capacitance=component.get("package", {}).get("c_pkg", 0.0),
+                inductance=component.get("package", {}).get("l_pkg", 0.0),
+            ),
+            # pins=component.get("pin", {}),
+            pins={name: Pin.from_tuple(name, pin) for name, pin in component.get("pin", {}).items()},
+            diff_pins=component.get("diff_pin", {}),
         )
-        view.set_content(self._content)
-        return view
-
-    @property
-    def pin(self):
-        """The pin selected most recently by the user.
-
-        Returns the first pin in the list, if the user hasn't made a
-        selection yet.
-        """
-        return self._pin_
-
-    @property
-    def pins(self):
-        "The list of component pins."
-        return self._pins
 
 
-class Model(HasTraits):  # pylint: disable=too-many-instance-attributes
-    """Encapsulation of a particular I/O model from an IBIS model file."""
+@dataclass
+class Model:
+    """Encapsulation of a particular I/O model from an IBIS model file.
 
-    def __init__(self, subDict):  # pylint: disable=too-many-locals,too-many-statements,too-many-branches
-        """
-        Args:
-            subDict (dict): Dictionary of sub-keywords/params.
-        """
+    Depending on the model type, some of the attributes may be None since only some are required
+    depending on the which ones are set.
+    """
 
-        # Super-class initialization is ABSOLUTELY NECESSARY, in order
-        # to get all the Traits/UI machinery setup correctly.
-        super().__init__()
+    name: str
+    model_type: str
+    voltage_range: Tuple[float, float]
+    c_comp: Optional[float] = None
+    cref: Optional[float] = None
+    vref: Optional[float] = None
+    vmeas: Optional[float] = None
+    rref: Optional[float] = None
+    temperature_range: Optional[Tuple[float, float]] = None
+    ramp: Optional[dict] = None
+    algorithmic_model: Optional[dict] = None
+    pulldown: Optional[list] = None
+    pullup: Optional[list] = None
+    gnd_clamp: Optional[list] = None
+    power_clamp: Optional[list] = None
+    _impedance: Optional[float] = field(init=False, default=None)
+    _slew: Optional[float] = field(init=False, default=None)
+    _plot_data: dict = field(init=False, default_factory=dict)
+    _ami_file: Optional[Path] = field(init=False, default=None)
+    _dll_file: Optional[Path] = field(init=False, default=None)
 
-        # Stash the sub-keywords/parameters.
-        self._subDict = subDict
+    def __post_init__(self):
+        self._plot_data = self.__process_model()
+        self._ami_file, self._dll_file = self.get_algorithmic_model_for_operating_system(self.algorithmic_model)
 
-        # Fetch available keyword/parameter definitions.
-        def maybe(name):
-            return subDict[name] if name in subDict else None
+    @classmethod
+    def from_dict(cls, name: str, model: dict):
+        return cls(
+            name=name,
+            model_type=model.get("model_type", ""),
+            voltage_range=model.get("voltage_range", (0.0, 0.0)),
+            c_comp=model.get("c_comp", None),
+            cref=model.get("cref", None),
+            vref=model.get("vref", None),
+            vmeas=model.get("vmeas", None),
+            rref=model.get("rref", None),
+            temperature_range=model.get("temperature_range", None),
+            ramp=model.get("ramp", None),
+            algorithmic_model=model.get("algorithmic_model", None),
+            pulldown=model.get("pulldown", None),
+            pullup=model.get("pullup", None),
+            gnd_clamp=model.get("gnd_clamp", None),
+            power_clamp=model.get("power_clamp", None),
+        )
 
-        self._mtype = maybe("model_type")
-        self._ccomp = maybe("c_comp")
-        self._cref = maybe("cref")
-        self._vref = maybe("vref")
-        self._vmeas = maybe("vmeas")
-        self._rref = maybe("rref")
-        self._trange = maybe("temperature_range")
-        self._vrange = maybe("voltage_range")
-        self._ramp = maybe("ramp")
+    def gui(self):
+        gui = IBISModelView(self)
+        gui.exec()
 
-        # Check for the required keywords.
-        if not self._mtype:
-            raise LookupError("Missing Model_type!")
-        if not self._vrange:
-            raise LookupError("Missing [Voltage Range]!")
-
-        def proc_iv(xs):
-            """Process an I/V table."""
-            if len(xs) < 2:
-                raise ValueError("Insufficient number of I-V data points!")
-            try:
-                vs, iss = zip(*(xs))  # Idiomatic Python for ``unzip``.
-            except Exception as exc:
-                raise ValueError(f"xs: {xs}") from exc
-            ityps, imins, imaxs = zip(*iss)
-            vmeas = self._vmeas
-
-            def calcZ(x):
-                (vs, ivals) = x
-                if vmeas:
-                    ix = np.where(np.array(vs) >= vmeas)[0][0]
-                else:
-                    ix = np.where(np.array(vs) >= max(vs) / 2)[0][0]
-                try:
-                    return abs((vs[ix] - vs[ix - 1]) / (ivals[ix] - ivals[ix - 1]))
-                except ZeroDivisionError:
-                    return 1e7  # Use 10 MOhms in place of infinity.
-
-            zs = map(calcZ, zip([vs, vs, vs], [ityps, imins, imaxs]))
-            return vs, ityps, imins, imaxs, zs
-
+    def __process_model(self):
         # Infer impedance and/or rise/fall time, as per model type.
-        mtype = self._mtype.lower()
+        mtype = self.model_type.lower()
+        plotdata = {}
         if mtype in ("output", "i/o"):
-            if "pulldown" not in subDict or "pullup" not in subDict:
-                raise LookupError("Missing I-V curves!")
-            plotdata = ArrayPlotData()
-            pd_vs, pd_ityps, pd_imins, pd_imaxs, pd_zs = proc_iv(subDict["pulldown"])
-            pu_vs, pu_ityps, pu_imins, pu_imaxs, pu_zs = proc_iv(subDict["pullup"])
-            pu_vs = self._vrange[0] - np.array(pu_vs)  # Correct for Vdd-relative pull-up voltages.
+            pd_vs, pd_ityps, pd_imins, pd_imaxs, pd_zs = self.proc_iv(self.pulldown, self.vmeas)
+            pu_vs, pu_ityps, pu_imins, pu_imaxs, pu_zs = self.proc_iv(self.pullup, self.vmeas)
+            pu_vs = self.voltage_range[0] - np.array(pu_vs)  # Correct for Vdd-relative pull-up voltages.
             pu_ityps = -np.array(pu_ityps)  # Correct for current sense, for nicer plot.
             pu_imins = -np.array(pu_imins)
             pu_imaxs = -np.array(pu_imaxs)
-            self._zout = (list(pd_zs)[0] + list(pu_zs)[0]) / 2
-            plotdata.set_data("pd_vs", pd_vs)
-            plotdata.set_data("pd_ityps", pd_ityps)
-            plotdata.set_data("pd_imins", pd_imins)
-            plotdata.set_data("pd_imaxs", pd_imaxs)
-            plotdata.set_data("pu_vs", pu_vs)
-            plotdata.set_data("pu_ityps", pu_ityps)
-            plotdata.set_data("pu_imins", pu_imins)
-            plotdata.set_data("pu_imaxs", pu_imaxs)
-            plot_iv = Plot(plotdata)  # , padding_left=75)
-            # The 'line_style' trait of a LinePlot instance must be 'dash' or 'dot dash' or 'dot' or 'long dash' or 'solid'.
-            plot_iv.plot(("pd_vs", "pd_ityps"), type="line", color="blue", line_style="solid", name="PD-Typ")
-            plot_iv.plot(("pd_vs", "pd_imins"), type="line", color="blue", line_style="dot", name="PD-Min")
-            plot_iv.plot(("pd_vs", "pd_imaxs"), type="line", color="blue", line_style="dash", name="PD-Max")
-            plot_iv.plot(("pu_vs", "pu_ityps"), type="line", color="red", line_style="solid", name="PU-Typ")
-            plot_iv.plot(("pu_vs", "pu_imins"), type="line", color="red", line_style="dot", name="PU-Min")
-            plot_iv.plot(("pu_vs", "pu_imaxs"), type="line", color="red", line_style="dash", name="PU-Max")
-            plot_iv.title = "Pull-Up/Down I-V Curves"
-            plot_iv.index_axis.title = "Vout (V)"
-            plot_iv.value_axis.title = "Iout (A)"
-            plot_iv.index_range.low_setting = 0
-            plot_iv.index_range.high_setting = self._vrange[0]
-            plot_iv.value_range.low_setting = 0
-            plot_iv.value_range.high_setting = 0.1
-            plot_iv.legend.visible = True
-            plot_iv.legend.align = "ul"
-            self.plot_iv = plot_iv
+            self._impedance = (list(pd_zs)[0] + list(pu_zs)[0]) / 2
+            plotdata["pd_vs"] = pd_vs
+            plotdata["pd_ityps"] = pd_ityps
+            plotdata["pd_imins"] = pd_imins
+            plotdata["pd_imaxs"] = pd_imaxs
+            plotdata["pu_vs"] = pu_vs
+            plotdata["pu_ityps"] = pu_ityps
+            plotdata["pu_imins"] = pu_imins
+            plotdata["pu_imaxs"] = pu_imaxs
 
-            if not self._ramp:
-                raise LookupError("Missing [Ramp]!")
-            ramp = subDict["ramp"]
-            self._slew = (ramp["rising"][0] + ramp["falling"][0]) / 2e9  # (V/ns)
+            self._slew = (self.ramp["rising"][0] + self.ramp["falling"][0]) / 2e9  # (V/ns)
         elif mtype == "input":
-            if "gnd_clamp" not in subDict and "power_clamp" not in subDict:
-                raise LookupError("Missing clamp curves!")
 
-            plotdata = ArrayPlotData()
-
-            if "gnd_clamp" in subDict:
-                gc_vs, gc_ityps, gc_imins, gc_imaxs, gc_zs = proc_iv(subDict["gnd_clamp"])
+            if self.gnd_clamp:
+                gc_vs, gc_ityps, gc_imins, gc_imaxs, gc_zs = self.proc_iv(self.gnd_clamp, self.vmeas)
                 gc_z = list(gc_zs)[0]  # Use typical value for Zin calc.
-                plotdata.set_data("gc_vs", gc_vs)
-                plotdata.set_data("gc_ityps", gc_ityps)
-                plotdata.set_data("gc_imins", gc_imins)
-                plotdata.set_data("gc_imaxs", gc_imaxs)
+                plotdata.update({"gc_vs": gc_vs, "gc_ityps": gc_ityps, "gc_imins": gc_imins, "gc_imaxs": gc_imaxs})
 
-            if "power_clamp" in subDict:
-                pc_vs, pc_ityps, pc_imins, pc_imaxs, pc_zs = proc_iv(subDict["power_clamp"])
+            if self.power_clamp:
+                pc_vs, pc_ityps, pc_imins, pc_imaxs, pc_zs = self.proc_iv(self.power_clamp, self.vmeas)
                 pc_z = list(pc_zs)[0]
-                pc_vs = self._vrange[0] - np.array(pc_vs)  # Correct for Vdd-relative pull-up voltages.
+                pc_vs = self.voltage_range[0] - np.array(pc_vs)  # Correct for Vdd-relative pull-up voltages.
                 pc_ityps = -np.array(pc_ityps)  # Correct for current sense, for nicer plot.
                 pc_imins = -np.array(pc_imins)
                 pc_imaxs = -np.array(pc_imaxs)
-                plotdata.set_data("pc_vs", pc_vs)
-                plotdata.set_data("pc_ityps", pc_ityps)
-                plotdata.set_data("pc_imins", pc_imins)
-                plotdata.set_data("pc_imaxs", pc_imaxs)
+                plotdata.update({"pc_vs": pc_vs, "pc_ityps": pc_ityps, "pc_imins": pc_imins, "pc_imaxs": pc_imaxs})
 
-            plot_iv = Plot(plotdata)  # , padding_left=75)
-            # The 'line_style' trait of a LinePlot instance must be 'dash' or 'dot dash' or 'dot' or 'long dash' or 'solid'.
-            if "gnd_clamp" in subDict:
-                plot_iv.plot(("gc_vs", "gc_ityps"), type="line", color="blue", line_style="solid", name="PD-Typ")
-                plot_iv.plot(("gc_vs", "gc_imins"), type="line", color="blue", line_style="dot", name="PD-Min")
-                plot_iv.plot(("gc_vs", "gc_imaxs"), type="line", color="blue", line_style="dash", name="PD-Max")
-            if "power_clamp" in subDict:
-                plot_iv.plot(("pc_vs", "pc_ityps"), type="line", color="red", line_style="solid", name="PU-Typ")
-                plot_iv.plot(("pc_vs", "pc_imins"), type="line", color="red", line_style="dot", name="PU-Min")
-                plot_iv.plot(("pc_vs", "pc_imaxs"), type="line", color="red", line_style="dash", name="PU-Max")
-            plot_iv.title = "Power/GND Clamp I-V Curves"
-            plot_iv.index_axis.title = "Vin (V)"
-            plot_iv.value_axis.title = "Iin (A)"
-            plot_iv.index_range.low_setting = 0
-            plot_iv.index_range.high_setting = self._vrange[0]
-            plot_iv.value_range.low_setting = 0
-            plot_iv.value_range.high_setting = 0.1
-            plot_iv.legend.visible = True
-            plot_iv.legend.align = "ul"
-            self.plot_iv = plot_iv
-
-            if "gnd_clamp" in subDict and "power_clamp" in subDict:
+            if self.gnd_clamp and self.power_clamp:
                 # Parallel combination, as both clamps are always active.
-                self._zin = (gc_z * pc_z) / (gc_z + pc_z)  # pylint: disable=possibly-used-before-assignment
-            elif "gnd_clamp" in subDict:
-                self._zin = gc_z
+                self._impedance = (gc_z * pc_z) / (gc_z + pc_z)  # pylint: disable=possibly-used-before-assignment
+            elif self.gnd_clamp:
+                self._impedance = gc_z
             else:
-                self._zin = pc_z
+                self._impedance = pc_z
 
-        # Separate AMI executables by OS.
-        def is64(x):
-            ((_, b), _) = x
-            return int(b) == 64
-
-        def isWin(x):
-            ((os, _), _) = x
-            return os.lower() == "windows"
-
-        def partition(p, xs):
-            ts, fs = [], []
-            for x in xs:
-                if p(x):
-                    ts.append(x)
-                else:
-                    fs.append(x)
-            return ts, fs
-
-        def getFiles(x):
-            if x:
-                ((_, _), fs) = x[0]
-                return fs
-            return []
-
-        def splitExecs(fs):
-            wins, lins = partition(isWin, fs)
-            return (getFiles(wins), getFiles(lins))
-
-        self._exec32Wins, self._exec32Lins = [], []
-        self._exec64Wins, self._exec64Lins = [], []
-        if "algorithmic_model" in subDict:
-            execs = subDict["algorithmic_model"]
-            exec64s, exec32s = partition(is64, execs)
-            self._exec32Wins, self._exec32Lins = splitExecs(exec32s)
-            self._exec64Wins, self._exec64Lins = splitExecs(exec64s)
-
-        # Set up the GUI.
-        self.add_trait("model_type", String(self._mtype))
-        self.add_trait("c_comp", String(self._ccomp))
-        self.add_trait("cref", String(self._cref))
-        self.add_trait("vref", String(self._vref))
-        self.add_trait("vmeas", String(self._vmeas))
-        self.add_trait("rref", String(self._rref))
-        self.add_trait("trange", String(self._trange))
-        self.add_trait("vrange", String(self._vrange))
-        if mtype in ("output", "i/o"):
-            self.add_trait("zout", String(self._zout))
-            self.add_trait("slew", String(self._slew))
-        elif mtype == "input":
-            self.add_trait("zin", String(self._zin))
-        self._content = [
-            Group(
-                Item("model_type", label="Model type", style="readonly"),
-                Item("c_comp", label="Ccomp", style="readonly"),
-                Item("trange", label="Temperature Range", style="readonly"),
-                Item("vrange", label="Voltage Range", style="readonly"),
-                Group(
-                    Item("cref", label="Cref", style="readonly"),
-                    Item("vref", label="Vref", style="readonly"),
-                    Item("vmeas", label="Vmeas", style="readonly"),
-                    Item("rref", label="Rref", style="readonly"),
-                    orientation="horizontal",
-                ),
-                label="Model",
-                show_border=True,
-            ),
-        ]
-        if mtype in ("output", "i/o"):
-            self._content.append(Item("zout", label="Impedance (Ohms)", style="readonly", format_str="%4.1f"))
-            self._content.append(Item("slew", label="Slew Rate (V/ns)", style="readonly", format_str="%4.1f"))
-            self._content.append(Item("plot_iv", editor=ComponentEditor(), show_label=False))
-        elif mtype == "input":
-            self._content.append(Item("zin", label="Impedance (Ohms)", style="readonly", format_str="%4.1f"))
-            self._content.append(Item("plot_iv", editor=ComponentEditor(), show_label=False))
-
-    def __str__(self):
-        res = "Model Type:\t" + self._mtype + "\n"
-        res += "C_comp:    \t" + str(self._ccomp) + "\n"
-        res += "Cref:      \t" + str(self._cref) + "\n"
-        res += "Vref:      \t" + str(self._vref) + "\n"
-        res += "Vmeas:     \t" + str(self._vmeas) + "\n"
-        res += "Rref:      \t" + str(self._rref) + "\n"
-        res += "Temperature Range:\t" + str(self._trange) + "\n"
-        res += "Voltage Range:    \t" + str(self._vrange) + "\n"
-        if "algorithmic_model" in self._subDict:
-            res += "Algorithmic Model:\n" + "\t32-bit:\n"
-            if self._exec32Lins:
-                res += "\t\tLinux: " + str(self._exec32Lins) + "\n"
-            if self._exec32Wins:
-                res += "\t\tWindows: " + str(self._exec32Wins) + "\n"
-            res += "\t64-bit:\n"
-            if self._exec64Lins:
-                res += "\t\tLinux: " + str(self._exec64Lins) + "\n"
-            if self._exec64Wins:
-                res += "\t\tWindows: " + str(self._exec64Wins) + "\n"
-        return res
-
-    def __call__(self):
-        self.edit_traits(kind="livemodal")
-
-    def default_traits_view(self):
-        "Default Traits/UI view definition."
-        view = View(
-            resizable=False,
-            buttons=ModalButtons,
-            title="PyBERT IBIS Model Viewer",
-            id="pyibisami.ibis_parser.Model",
-        )
-        view.set_content(self._content)
-        return view
+        return plotdata
 
     @property
-    def zout(self):
-        "The driver impedance."
-        return self._zout
+    def impedance(self):
+        """The impedance of the I/O model."""
+        return self._impedance
 
     @property
     def slew(self):
-        "The driver slew rate."
+        """The driver slew rate."""
         return self._slew
 
     @property
-    def zin(self):
-        "The input impedance."
-        return self._zin
-
-    @property
     def ccomp(self):
-        "The parasitic capacitance."
-        return self._ccomp
+        """The parasitic capacitance."""
+        return self.c_comp
 
     @property
     def mtype(self):
         """Model type."""
-        return self._mtype
+        return self.model_type
+
+    @property
+    def plot_data(self):
+        """The plot data for the model."""
+        return self._plot_data
+
+    @property
+    def ami_file(self):
+        """If there was an ami file for this model and it matches the current operating system, return it."""
+        return self._ami_file
+
+    @property
+    def dll_file(self):
+        """If there was a dll file for this model and it matches the current operating system, return it."""
+        return self._dll_file
+
+    @staticmethod
+    def get_algorithmic_model_for_operating_system(algorithmic_model: dict[str, list[str]]) -> tuple[str, str]:
+        """Based off the operating system, return the appropriate algorithmic model and DLL/SO and AMI file as Path objects."""
+
+        if algorithmic_model:
+            os_name = platform.system().lower()  # 'windows', 'linux', etc.
+            if os_name.startswith("win"):
+                os_key = "windows"
+            elif os_name.startswith("lin"):
+                os_key = "linux"
+            else:
+                # Not supported
+                return None, None
+
+            # Detect architecture
+            arch = "64" if sys.maxsize > 2**32 else "32"
+
+            # The keys in algorithmic_model are like ('windows', '64'), etc.
+            for os_arch, files in algorithmic_model:
+                if isinstance(os_arch, tuple) and len(os_arch) == 2:
+                    os_val, arch_val = os_arch
+                    if os_val.lower() == os_key and str(arch_val) == arch:
+                        # files should be [dll/so, ami]
+                        if len(files) == 2:
+                            return files[0], files[1]
+        return None, None
+
+    @staticmethod
+    def proc_iv(xs, v_measure):
+        """Process an I/V table."""
+        if len(xs) < 2:
+            raise ValueError("Insufficient number of I-V data points!")
+        try:
+            vs, iss = zip(*(xs))  # Idiomatic Python for ``unzip``.
+        except Exception as exc:
+            raise ValueError(f"xs: {xs}") from exc
+        ityps, imins, imaxs = zip(*iss)
+
+        def calcZ(x):
+            (vs, ivals) = x
+            if v_measure:
+                ix = np.where(np.array(vs) >= v_measure)[0][0]
+            else:
+                ix = np.where(np.array(vs) >= max(vs) / 2)[0][0]
+            try:
+                return abs((vs[ix] - vs[ix - 1]) / (ivals[ix] - ivals[ix - 1]))
+            except ZeroDivisionError:
+                return 1e7  # Use 10 MOhms in place of infinity.
+
+        zs = map(calcZ, zip([vs, vs, vs], [ityps, imins, imaxs]))
+        return vs, ityps, imins, imaxs, zs
