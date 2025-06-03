@@ -3,7 +3,6 @@ import sys
 from pathlib import Path
 
 import pytest
-from PySide6.QtWidgets import QComboBox, QDialogButtonBox
 
 from pyibisami.ibis.model import IBISModel
 from pyibisami.ibis.parser import parse_ibis_file
@@ -12,8 +11,8 @@ from pyibisami.ibis.parser import parse_ibis_file
 def get_ibis_files():
     """Get list of IBIS files from environment variable if it exists.
 
-    If the environment variable PYIBISAMI_TEST_DIR is not set, the test will be skipped.
-    We do not want to check in IBIS files to the repository, as they are large and may be under license restrictions.
+    If the environment variable PYIBISAMI_TEST_DIR is not set, the test will be skipped. We do not want to check in
+    IBIS files to the repository, as they are large and may be under license restrictions.
     """
     ibis_dir = os.environ.get("PYIBISAMI_TEST_DIR")
     print(f"IBIS directory: {ibis_dir}")
@@ -34,11 +33,11 @@ def test_external_ibis_files(monkeypatch, qtbot, ibis_file):
 
     If we find a matching AMI file, we check that the IBIS model's AMI file and it's model are generated correctly.
 
-    The pytest.mark.parametrize will run this test once for each IBIS file found and report them as a test per line item
-    in the terminal.
+    The pytest.mark.parametrize will run this test once for each IBIS file found and report them as a test per line
+    item in the terminal.
     """
-    # Patch sys.maxsize to simulate a 32-bit system
-    monkeypatch.setattr(sys, "maxsize", 2**31 - 1)
+    # # Patch sys.maxsize to simulate a 32-bit system
+    # monkeypatch.setattr(sys, "maxsize", 2**31 - 1)
     filepath = Path(ibis_file)
     model = parse_ibis_file(filepath)
     assert model is not None

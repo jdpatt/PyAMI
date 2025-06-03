@@ -41,7 +41,7 @@ from typing import Any, NewType
 import click
 import em
 
-ParamDict      = NewType("ParamDict",      dict[str, Any])
+ParamDict = NewType("ParamDict", dict[str, Any])
 NamedParamDict = NewType("NamedParamDict", tuple[str, ParamDict])
 TestDefinition = NewType("TestDefinition", tuple[str, NamedParamDict, NamedParamDict, str])
 
@@ -55,8 +55,7 @@ param_types = {
 
 
 def print_param(indent, name, param):  # pylint: disable=too-many-branches
-    """Print AMI parameter specification. Handle nested parameters, via
-    recursion.
+    """Print AMI parameter specification. Handle nested parameters, via recursion.
 
     Args:
         indent (str): String containing some number of spaces.
@@ -128,15 +127,9 @@ def print_code(pname, param):
 
 
 def mk_model(
-    ibis_params: ParamDict,
-    ami_params: ParamDict,
-    model_name: str,
-    description: str,
-    out_dir: str = "."
+    ibis_params: ParamDict, ami_params: ParamDict, model_name: str, description: str, out_dir: str = "."
 ) -> None:
-    """
-    Generate ibis, ami, and cpp files, by merging the
-    device specific parameterization with the templates.
+    """Generate ibis, ami, and cpp files, by merging the device specific parameterization with the templates.
 
     Args:
         ibis_params: Dictionary of IBIS model parameter definitions.
@@ -181,8 +174,7 @@ def mk_model(
 
 
 def ami_config(py_file):
-    """
-    Read in ``py_file`` and cpp.em files, then generate: ibis, ami, and cpp files.
+    """Read in ``py_file`` and cpp.em files, then generate: ibis, ami, and cpp files.
 
     Args:
         py_file: name of model configuration file (<stem>.py)
@@ -204,8 +196,7 @@ def ami_config(py_file):
 
 
 def mk_combs(dict_items: list[tuple[str, Any]]) -> list[list[tuple[str, Any]]]:
-    """
-    Make all combinations possible from a list of dictionary items.
+    """Make all combinations possible from a list of dictionary items.
 
     Args:
         dict_items: List of dictionary key/value pairs.
@@ -225,12 +216,9 @@ def mk_combs(dict_items: list[tuple[str, Any]]) -> list[list[tuple[str, Any]]]:
 
 
 def mk_tests(  # pylint: disable=too-many-locals
-    test_defs: dict[str, TestDefinition],
-    file_base_name: str,
-    test_dir: str = "test_runs"
+    test_defs: dict[str, TestDefinition], file_base_name: str, test_dir: str = "test_runs"
 ) -> None:
-    """
-    Make the test run configuration files.
+    """Make the test run configuration files.
 
     Args:
         test_defs: Dictionary of test sweep definitions.
@@ -277,11 +265,9 @@ def mk_tests(  # pylint: disable=too-many-locals
 @click.argument("py_file", type=click.Path(exists=True, resolve_path=True))
 @click.version_option()
 def main(py_file):
-    """
-    Configure IBIS-AMI model C++ source code, IBIS model, and AMI file.
-    This command generates three files based off the input config file.
-    It expects a .cpp.em file to be located in the same directory so that it can
-    generate a cpp file from the config file and template file.
+    """Configure IBIS-AMI model C++ source code, IBIS model, and AMI file. This command generates three files based off
+    the input config file. It expects a .cpp.em file to be located in the same directory so that it can generate a cpp
+    file from the config file and template file.
 
     Args:
        py_file: name of model configuration file (*.py)

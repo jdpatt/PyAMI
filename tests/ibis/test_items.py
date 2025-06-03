@@ -1,4 +1,4 @@
-from pyibisami.ibis.items import Component, Model, Package, Pin
+from pyibisami.ibis.items import Component, Package, Pin
 
 
 def test_pin_from_tuple():

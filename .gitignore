@@ -120,7 +120,7 @@ empy_exec_test.*
 
 # Temporary files
 !.pre-commit-config.yaml
-
+debug.py
 tests/examples/out
 tests/examples/test_results
 tests/examples/*.cpp

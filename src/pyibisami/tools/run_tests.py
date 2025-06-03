@@ -16,13 +16,12 @@ import click
 import em
 import numpy as np
 
-from pyibisami.ami.model    import AMIModel
-from pyibisami.common       import TestSweep
+from pyibisami.ami.model import AMIModel
+from pyibisami.common import TestSweep
 
 
 def plot_name(tst_name, n=0):
-    """Plot name generator keeps multiple tests from overwriting each other's
-    plots."""
+    """Plot name generator keeps multiple tests from overwriting each other's plots."""
     while True:
         n += 1
         yield f"{tst_name}_plot_{n}.png"
@@ -90,11 +89,9 @@ def color_picker(num_hues=3, first_hue=0):
 
 
 def expand_params(input_parameters: str) -> list[TestSweep]:
-    """
-    Take the command line input and convert it into usable parameter sweeps.
+    """Take the command line input and convert it into usable parameter sweeps.
 
-    We can pass in a file, directory, or raw string here.
-    Handle all three cases.
+    We can pass in a file, directory, or raw string here. Handle all three cases.
     """
     if Path(input_parameters).exists():
         if Path(input_parameters).is_file():
@@ -128,8 +125,7 @@ def expand_params(input_parameters: str) -> list[TestSweep]:
 
 
 def run_tests(**kwargs):  # pylint: disable=too-many-locals
-    """Provide a thin wrapper around the click interface so that we can test
-    the operation."""
+    """Provide a thin wrapper around the click interface so that we can test the operation."""
 
     # Fetch options and cast into local independent variables.
     test_dir = Path(kwargs["test_dir"]).resolve()

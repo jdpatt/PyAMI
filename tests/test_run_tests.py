@@ -13,7 +13,10 @@ from pyibisami.tools.run_tests import (
 
 class TestRunTests(object):
     def test_hsv2rgb(self):
-        """Convert an HSV number to a RGB one. Everything is normalized to 1."""
+        """Convert an HSV number to a RGB one.
+
+        Everything is normalized to 1.
+        """
         # Black
         assert hsv2rgb(0, 0, 0) == (0.0, 0.0, 0.0)
         # Cyan

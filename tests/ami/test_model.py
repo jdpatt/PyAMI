@@ -1,18 +1,14 @@
 import sys
 from pathlib import Path
 
-import pytest
-
 from pyibisami.ami.model import AMIModel, AMIModelInitializer
-
 
 
 class Test_AMIModel(object):
     def test_init(self):
         """Verify that we can load in a .so file.
 
-        This example and compiled object files come from ibisami a related module that this
-        command is used with.
+        This example and compiled object files come from ibisami a related module that this command is used with.
         """
         if sys.platform == "win32":
             example_so = str(Path(__file__).parents[1].joinpath("examples", "example_tx_x86_amd64.dll"))

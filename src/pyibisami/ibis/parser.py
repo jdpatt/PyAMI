@@ -60,8 +60,7 @@ ignore = many(whitespace | comment)  # None is okay; so, can be used completely 
 
 
 def logf(p: Parser, preStr: str = "") -> Parser:
-    """
-    Returns parser ``p`` wrapped in a thin shell, which logs any failure at the point of occurrence.
+    """Returns parser ``p`` wrapped in a thin shell, which logs any failure at the point of occurrence.
 
     Args:
         p: The original parser.
@@ -101,8 +100,8 @@ def lexeme(p):
 def word(p):
     """Line limited word lexer.
 
-    Only skips space after words; doesn't skip comments or newlines.
-    Requires, at least, one white space character after word.
+    Only skips space after words; doesn't skip comments or newlines. Requires, at least, one white space character
+    after word.
     """
     return p << regex(r"\s+")
 
@@ -544,23 +543,24 @@ def validate_ibis_model(model_dict):
     if not model_dict["models"]:
         raise MalformedIBISFileError("This IBIS model has no models!")
 
-    for model_to_validate in model_dict["models"].values():
+    for model_name, model_to_validate in model_dict["models"].items():
         # Checks for any type of model.
+
         if model_to_validate["model_type"] is None:
-            raise MalformedIBISFileError("This IBIS model has no model type!")
+            raise MalformedIBISFileError(f"This IBIS model {model_name} has no model type!")
         if model_to_validate["voltage_range"] is None:
-            raise MalformedIBISFileError("This IBIS model has no voltage range!")
+            raise MalformedIBISFileError(f"This IBIS model {model_name} has no voltage range!")
 
         # Checks for TX models
         if model_to_validate["model_type"].lower() in ("output", "i/o"):
-            if "pulldown" not in model_to_validate or "pullup" not in model_to_validate:
-                raise MalformedIBISFileError("This IBIS model has no I-V curves!")
+            if "pulldown" not in model_to_validate and "pullup" not in model_to_validate:
+                raise MalformedIBISFileError(f"This IBIS model {model_name} has no I-V curves!")
             if "ramp" not in model_to_validate:
-                raise MalformedIBISFileError("This IBIS model has no ramp values!")
+                raise MalformedIBISFileError(f"This IBIS model {model_name} has no ramp values!")
 
         # Checks for RX models
         elif model_to_validate["model_type"].lower() in ("input"):
-            if "gnd_clamp" not in model_to_validate or "power_clamp" not in model_to_validate:
-                raise MalformedIBISFileError("This IBIS model has no clamp values!")
+            if "gnd_clamp" not in model_to_validate and "power_clamp" not in model_to_validate:
+                raise MalformedIBISFileError(f"This IBIS model {model_name} has no clamp values!")
 
     return model_dict

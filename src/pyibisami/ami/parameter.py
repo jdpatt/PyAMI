@@ -21,20 +21,18 @@ class AMIParameter:  # pylint: disable=too-many-instance-attributes,too-few-publ
 
     This class encapsulates the attributes and behavior of a AMI
     parameter.
+
+    Note: They are read-only, despite the presence of apparent setters.
+          (The idea is that, once initialized, parameter definitions
+           are immutable.)
+          The only exception to this is pvalue, which has been made
+          writable, for scripted non-GUI use case and current_value which is used to store the selected value.
+          Be very careful w/ this; there is NO CHECKING!
+
+    Note that the setters, below, are only intended for use by
+    __init__(). They may raise an *AMIParamError* exception. This is
+    to ensure that a malformed instance never be created.
     """
-
-    # Properties.
-
-    # Note: They are read-only, despite the presence of apparent setters.
-    #       (The idea is that, once initialized, parameter definitions
-    #        are immutable.)
-    #       The only exception to this is pvalue, which has been made
-    #       writable, for scripted non-GUI use cases.
-    #       Be very careful w/ this; there is NO CHECKING!
-
-    # Note that the setters, below, are only intended for use by
-    # __init__(). They may raise an *AMIParamError* exception. This is
-    # to ensure that a malformed instance never be created.
 
     def _get_name(self):
         """pname."""
@@ -139,7 +137,7 @@ class AMIParameter:  # pylint: disable=too-many-instance-attributes,too-few-publ
     plist_tip = property(_get_list_tip, doc="List tips of AMI parameter.")
 
     # Helpers.
-    # These 3 just accomodate the awkwardness caused by the optional
+    # These 3 just accommodate the awkwardness caused by the optional
     # nature of the 'Format' keyword, in *.AMI files. Since, a properly
     # formed instance of *AMIParameter* will always have a *format*
     # property, we don't need to make these properties of that class.
@@ -170,6 +168,15 @@ class AMIParameter:  # pylint: disable=too-many-instance-attributes,too-few-publ
         return self._msg
 
     msg = property(_get_msg, doc="Any warning messages encountered, during parameter initialization.")
+
+    @property
+    def current_value(self):
+        """Instead of keeping a separate dictionary of traits, we can just stash the current value here."""
+        return self._current_value
+
+    @current_value.setter
+    def current_value(self, value):
+        self._current_value = value
 
     # This dictionary defines both:
     #
@@ -320,5 +327,20 @@ class AMIParameter:  # pylint: disable=too-many-instance-attributes,too-few-publ
                 except (ValueError, TypeError) as exc:
                     raise AMIParamError(f"Couldn't read strings from '{vals}'.\n") from exc
             self._value = temp_vals
-
         self._name = name
+        # Initialize current_value based on format and type
+        if param_format == "List":
+            # For List format, use default if available, otherwise first value
+            if param_default is not None:
+                self._current_value = param_default
+            else:
+                self._current_value = self._value[0] if isinstance(self._value, list) else self._value
+        elif param_format == "Range":
+            # For Range format, use default if available, otherwise first value (current value)
+            if param_default is not None:
+                self._current_value = param_default
+            else:
+                self._current_value = self._value
+        else:
+            # For Value format, just use the value directly
+            self._current_value = self._value

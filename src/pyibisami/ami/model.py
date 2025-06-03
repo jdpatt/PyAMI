@@ -1,5 +1,4 @@
-"""
-Class definitions for working with IBIS-AMI models.
+"""Class definitions for working with IBIS-AMI models.
 
 Original Author: David Banas
 
@@ -9,78 +8,36 @@ Copyright (c) 2019 David Banas; All rights reserved World wide.
 """
 
 import copy as cp
+import logging
 from ctypes import CDLL, byref, c_char_p, c_double  # pylint: disable=no-name-in-module
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
-from numpy.random     import default_rng
+from numpy.random import default_rng
+from numpy.typing import NDArray
 
-from pyibisami.common import Rvec, deconv_same
+from pyibisami.ami.parameter import AMIParameter
+from pyibisami.ami.parser import parse_ami_string
+from pyibisami.common import (
+    ModelSpecificDict,
+    Parameters,
+    ParamName,
+    ParamValues,
+    ReservedParamDict,
+    Rvec,
+)
+from pyibisami.utils import deconv_same, interpFile
 
-
-def loadWave(filename: str) -> tuple[Rvec, Rvec]:
-    """
-    Load a waveform file.
-
-    The file should consist of any number of lines, where each line
-    contains, first, a time value and, second, a voltage value.
-    Assume the first line is a header, and discard it.
-
-    Specifically, this function may be used to load in waveform files
-    saved from *CosmosScope*.
-
-    Args:
-        filename: Name of waveform file to read in.
-
-    Returns:
-        A pair of *NumPy* arrays containing the time and voltage values, respectively.
-    """
-
-    with open(filename, "r", encoding="utf-8") as theFile:
-        theFile.readline()  # Consume the header line.
-        time = []
-        voltage = []
-        for line in theFile:
-            tmp = list(map(float, line.split()))
-            time.append(tmp[0])
-            voltage.append(tmp[1])
-        return (np.array(time), np.array(voltage))
+if TYPE_CHECKING:
+    from pyibisami.ami.gui import AMIParameterDialog
 
 
-def interpFile(filename: str, sample_per: float) -> Rvec:
-    """
-    Read in a waveform from a file, and convert it to the given sample rate,
-    using linear interpolation.
-
-    Args:
-        filename: Name of waveform file to read in.
-        sample_per: New sample interval, in seconds.
-
-    Returns:
-        A *NumPy* array containing the resampled waveform.
-    """
-
-    impulse = loadWave(filename)
-    ts = impulse[0]
-    ts = ts - ts[0]
-    vs = impulse[1]
-    tmax = ts[-1]
-    # Build new impulse response, at new sampling period, using linear interpolation.
-    res = []
-    t = 0.0
-    i = 0
-    while t < tmax:
-        while ts[i] <= t:
-            i = i + 1
-        res.append(vs[i - 1] + (vs[i] - vs[i - 1]) * (t - ts[i - 1]) / (ts[i] - ts[i - 1]))
-        t = t + sample_per
-    return np.array(res)
+logger = logging.getLogger("pyibisami.ami")
 
 
 class AMIModelInitializer:
-    """
-    Class containing the initialization data for an instance of ``AMIModel``.
+    """Class containing the initialization data for an instance of ``AMIModel``.
 
     Created primarily to facilitate use of the PyAMI package at the
     pylab command prompt, this class can be used by the pylab user, in
@@ -105,11 +62,9 @@ class AMIModelInitializer:
     }
 
     def __init__(self, ami_params: dict, info_params: Optional[dict] = None, **optional_args):
-        """
-        Constructor accepts a mandatory dictionary containing the AMI
-        parameters, as well as optional information parameter dictionary
-        and initialization data overrides, and validates them, before
-        using them to update the local initialization data structures.
+        """Constructor accepts a mandatory dictionary containing the AMI parameters, as well as optional information
+        parameter dictionary and initialization data overrides, and validates them, before using them to update the
+        local initialization data structures.
 
         Valid names of optional initialization data overrides:
 
@@ -160,10 +115,9 @@ class AMIModelInitializer:
                     self._init_data[key] = optional_args[key]
 
     def __str__(self):
-        return "\n\t".join([
-            "AMIModelInitializer instance:",
-            f"`ami_params`: {self.ami_params}",
-            f"`info_params`: {self.ami_params}"])
+        return "\n\t".join(
+            ["AMIModelInitializer instance:", f"`ami_params`: {self.ami_params}", f"`info_params`: {self.ami_params}"]
+        )
 
     def _getChannelResponse(self):
         return list(map(float, self._init_data["channel_response"]))
@@ -221,17 +175,15 @@ class AMIModelInitializer:
 
 
 class AMIModel:  # pylint: disable=too-many-instance-attributes
-    """
-    Class defining the structure and behavior of an IBIS-AMI Model.
+    """Class defining the structure and behavior of an IBIS-AMI Model.
 
     Notes:
         1. Makes the calling of ``AMI_Close()`` automagic,
         by calling it from the destructor.
     """
 
-    def __init__(self, filename: str):
-        """
-        Load the dll and bind the 3 AMI functions.
+    def __init__(self, filename: str | Path):
+        """Load the dll and bind the 3 AMI functions.
 
         Args:
             filename: The DLL/SO file name.
@@ -240,11 +192,24 @@ class AMIModel:  # pylint: disable=too-many-instance-attributes
             OSError: If given file cannot be opened.
         """
 
-        self._filename = filename
-        self._ami_mem_handle = None
-        my_dll = CDLL(filename)
-        self._amiInit = my_dll.AMI_Init
-        self._amiClose = my_dll.AMI_Close
+        self._filename = Path(filename)
+
+        # Check if file exists
+        if not self._filename.exists():
+            raise FileNotFoundError(f"AMI model DLL not found: {self._filename}")
+
+        # Check if it's a file
+        if not self._filename.is_file():
+            raise OSError(f"Path exists but is not a file: {self._filename}")
+
+        try:
+            self._ami_mem_handle = None
+            my_dll = CDLL(str(filename))  # Requires a string object.
+            self._amiInit = my_dll.AMI_Init
+            self._amiClose = my_dll.AMI_Close
+        except OSError as e:
+            raise OSError(f"Failed to load AMI model DLL: {self._filename}") from e
+
         try:
             self._amiGetWave = my_dll.AMI_GetWave
         except Exception:  # pylint: disable=broad-exception-caught
@@ -257,32 +222,34 @@ class AMIModel:  # pylint: disable=too-many-instance-attributes
         This obviates the need for the user to call the ``AMI_Close()``
         function explicitly, and guards against memory leaks, during
         PyLab command prompt operation, by ensuring that ``AMI_Close()``
-        gets called automagically when the model goes out of scope.
+        gets called automatically when the model goes out of scope.
         """
         if self._ami_mem_handle:
             self._amiClose(self._ami_mem_handle)
 
     def __str__(self):
-        return "\n\t".join([
-            f"AMIModel instance: `{self._filename}`",
-            f"Length of initOut = {len(self._initOut)}",
-            f"row_size = {self._row_size}",
-            f"num_aggressors = {self._num_aggressors}",
-            f"sample_interval = {self._sample_interval}",
-            f"bit_time = {self._bit_time}",
-            f"samps_per_bit = {self._samps_per_bit}",
-            f"bits_per_call = {self._bits_per_call}",
-            f"ami_params_in = {self._ami_params_in}",
-            f"ami_params_out = {self._ami_params_out}",
-            f"&ami_mem_handle = {byref(self._ami_mem_handle)}",
-            f"Message = {self._msg}",
-            f"AMI_Init(): {self._amiInit}",
-            f"AMI_GetWave(): {self._amiGetWave}",
-            f"AMI_Close(): {self._amiClose}",])
+        return "\n\t".join(
+            [
+                f"AMIModel instance: `{self._filename}`",
+                f"Length of initOut = {len(self._initOut)}",
+                f"row_size = {self._row_size}",
+                f"num_aggressors = {self._num_aggressors}",
+                f"sample_interval = {self._sample_interval}",
+                f"bit_time = {self._bit_time}",
+                f"samps_per_bit = {self._samps_per_bit}",
+                f"bits_per_call = {self._bits_per_call}",
+                f"ami_params_in = {self._ami_params_in}",
+                f"ami_params_out = {self._ami_params_out}",
+                f"&ami_mem_handle = {byref(self._ami_mem_handle)}",
+                f"Message = {self._msg}",
+                f"AMI_Init(): {self._amiInit}",
+                f"AMI_GetWave(): {self._amiGetWave}",
+                f"AMI_Close(): {self._amiClose}",
+            ]
+        )
 
     def initialize(self, init_object: AMIModelInitializer):
-        """
-        Wraps the ``AMI_Init()`` function.
+        """Wraps the ``AMI_Init()`` function.
 
         Args:
             init_object: The model initialization data.
@@ -300,25 +267,22 @@ class AMIModel:  # pylint: disable=too-many-instance-attributes
         # Free any memory allocated by the previous initialization.
         if self._ami_mem_handle:
             self._amiClose(self._ami_mem_handle)
+            self._ami_mem_handle = None  # Explicitly invalidate the handle
 
         # Set up the AMI_Init() arguments.
-        self._channel_response = (   # pylint: disable=attribute-defined-outside-init
-            init_object._init_data[  # pylint: disable=protected-access
-                "channel_response"
-            ]
-        )
+        self._channel_response = init_object._init_data[  # pylint: disable=attribute-defined-outside-init
+            "channel_response"
+        ]  # pylint: disable=protected-access
         self._initOut = cp.copy(self._channel_response)  # type: ignore  # pylint: disable=attribute-defined-outside-init
         self._row_size = init_object._init_data[  # pylint: disable=protected-access,attribute-defined-outside-init
             "row_size"
         ]
-        self._num_aggressors = init_object._init_data[  # pylint: disable=protected-access,attribute-defined-outside-init
+        self._num_aggressors = init_object._init_data[
             "num_aggressors"
-        ]
-        self._sample_interval = (    # pylint: disable=attribute-defined-outside-init
-            init_object._init_data[  # pylint: disable=protected-access
-                "sample_interval"
-            ]
-        )
+        ]  # pylint: disable=protected-access,attribute-defined-outside-init
+        self._sample_interval = init_object._init_data[  # pylint: disable=attribute-defined-outside-init
+            "sample_interval"
+        ]  # pylint: disable=protected-access
         self._bit_time = init_object._init_data[  # pylint: disable=protected-access,attribute-defined-outside-init
             "bit_time"
         ]
@@ -327,14 +291,12 @@ class AMIModel:  # pylint: disable=too-many-instance-attributes
         # Check GetWave() consistency if possible.
         if init_object.info_params and init_object.info_params["GetWave_Exists"]:
             if not self._amiGetWave:
-                raise RuntimeError(
-                    "Reserved parameter `GetWave_Exists` is True, but I can't bind to `AMI_GetWave()`!"
-                )
+                raise RuntimeError("Reserved parameter `GetWave_Exists` is True, but I can't bind to `AMI_GetWave()`!")
 
         # Construct the AMI parameters string.
         def sexpr(pname, pval):
-            """Create an S-expression from a parameter name/value pair, calling
-            recursively as needed to elaborate sub-parameter dictionaries."""
+            """Create an S-expression from a parameter name/value pair, calling recursively as needed to elaborate sub-
+            parameter dictionaries."""
             if isinstance(pval, str):
                 return f'({pname} "{pval}")'
             if isinstance(pval, dict):
@@ -400,8 +362,7 @@ class AMIModel:  # pylint: disable=too-many-instance-attributes
         )
 
     def getWave(self, wave: Rvec, bits_per_call: int = 0) -> tuple[Rvec, Rvec, list[str]]:  # noqa: F405
-        """
-        Performs time domain processing of input waveform, using the ``AMI_GetWave()`` function.
+        """Performs time domain processing of input waveform, using the ``AMI_GetWave()`` function.
 
         Args:
             wave: Waveform to be processed.
@@ -443,12 +404,11 @@ class AMIModel:  # pylint: disable=too-many-instance-attributes
                 Signal = c_double * remaining_samps
                 tmp_wave = wave[idx:]
             else:
-                tmp_wave = wave[idx: idx + samps_per_call]
+                tmp_wave = wave[idx : idx + samps_per_call]
             _wave = Signal(*tmp_wave)
             try:
                 self._amiGetWave(
-                    byref(_wave), len(_wave), byref(_clock_times),
-                    byref(self._ami_params_out), self._ami_mem_handle
+                    byref(_wave), len(_wave), byref(_clock_times), byref(self._ami_params_out), self._ami_mem_handle
                 )  # type: ignore
             except OSError:
                 print(self)
@@ -466,14 +426,9 @@ class AMIModel:  # pylint: disable=too-many-instance-attributes
         return np.array(wave_out), np.array(clock_times[: len(wave_out) // self._samps_per_bit]), params_out
 
     def get_responses(  # pylint: disable=too-many-locals
-        self,
-        bits_per_call: int = 0,
-        pad_bits: int = 10,
-        nbits: int = 200,
-        calc_getw: bool = True
+        self, bits_per_call: int = 0, pad_bits: int = 10, nbits: int = 200, calc_getw: bool = True
     ) -> dict[str, Any]:
-        """
-        Get the impulse response of an initialized IBIS-AMI model, alone and convolved with the channel.
+        """Get the impulse response of an initialized IBIS-AMI model, alone and convolved with the channel.
 
         Keyword Args:
             bits_per_call: Number of bits to include in the input to `GetWave()`.
@@ -519,12 +474,12 @@ class AMIModel:  # pylint: disable=too-many-instance-attributes
         ignore_bits = info_params["Ignore_Bits"].pvalue if "Ignore_Bits" in info_params else 0
 
         # Capture/convert instance variables.
-        chnl_imp = np.array(self.channel_response) * ts     # input (a.k.a. - "channel") impulse response (V/sample)
-        out_imp = np.array(self.initOut) * ts               # output impulse response (V/sample)
+        chnl_imp = np.array(self.channel_response) * ts  # input (a.k.a. - "channel") impulse response (V/sample)
+        out_imp = np.array(self.initOut) * ts  # output impulse response (V/sample)
 
         # Calculate some needed intermediate values.
-        nspui = int(ui / ts)            # samps per UI
-        pad_samps = pad_bits * nspui    # leading edge padding samples for GetWave() calls
+        nspui = int(ui / ts)  # samps per UI
+        pad_samps = pad_bits * nspui  # leading edge padding samples for GetWave() calls
         len_h = len(out_imp)
         t = np.array([i * ts for i in range(-pad_samps, len_h - pad_samps)])
         f = np.array([i * 1.0 / (ts * len_h) for i in range(len_h // 2 + 1)])  # Assumes `rfft()` is used.
@@ -535,30 +490,33 @@ class AMIModel:  # pylint: disable=too-many-instance-attributes
             rslt["imp_resp_init"] = np.roll(h_model, -len(h_model) // 2 + 3 * nspui)
 
             h_init = np.roll(out_imp, pad_samps)
-            s_init = np.cumsum(h_init)                 # Step response.
-            p_init = s_init - np.pad(s_init[:-nspui], (nspui, 0), mode='constant', constant_values=0)
+            s_init = np.cumsum(h_init)  # Step response.
+            p_init = s_init - np.pad(s_init[:-nspui], (nspui, 0), mode="constant", constant_values=0)
             H_init = np.fft.rfft(self.initOut)
-            H_init *= s_init[-1] / np.abs(H_init[0])   # Normalize for proper d.c.
+            H_init *= s_init[-1] / np.abs(H_init[0])  # Normalize for proper d.c.
             rslt["out_resp_init"] = (t, h_init, s_init, p_init, f, H_init)
 
         if calc_getw and self.info_params["GetWave_Exists"]:
             # Get model's step response.
             rng = default_rng()
-            u = np.concatenate(
-                (rng.integers(low=0, high=2, size=ignore_bits),
-                 np.array([0] * pad_bits + [1] * nbits))).repeat(nspui) - 0.5
+            u = (
+                np.concatenate(
+                    (rng.integers(low=0, high=2, size=ignore_bits), np.array([0] * pad_bits + [1] * nbits))
+                ).repeat(nspui)
+                - 0.5
+            )
             wave_out, _, _ = self.getWave(u, bits_per_call=bits_per_call)
 
             # Calculate impulse response from step response.
-            rslt["imp_resp_getw"] = np.diff(wave_out[(ignore_bits + pad_bits) * nspui:])
+            rslt["imp_resp_getw"] = np.diff(wave_out[(ignore_bits + pad_bits) * nspui :])
 
             # Get step response of channel + model.
-            wave_in = np.convolve(u, chnl_imp)[:len(u)]
+            wave_in = np.convolve(u, chnl_imp)[: len(u)]
             wave_out, _, _ = self.getWave(wave_in, bits_per_call=bits_per_call)
-            s_getw = wave_out[ignore_bits * nspui:][:len(t)] + 0.5
+            s_getw = wave_out[ignore_bits * nspui :][: len(t)] + 0.5
             # Match the d.c. offset of Init() output, for easier comparison of Init() & GetWave() outputs.
             s_getw -= s_getw[pad_samps - 1]
-            p_getw = s_getw - np.pad(s_getw[:-nspui], (nspui, 0), mode='constant', constant_values=0)
+            p_getw = s_getw - np.pad(s_getw[:-nspui], (nspui, 0), mode="constant", constant_values=0)
             _s = s_getw[pad_samps:]
             h_getw = np.insert(np.diff(_s), 0, _s[0])
             len_hgw = len(h_getw)
@@ -629,3 +587,268 @@ class AMIModel:  # pylint: disable=too-many-instance-attributes
         return self._info_params
 
     info_params = property(_getInfoParams, doc="Reserved AMI parameter values for this model.")
+
+
+class AMIParamConfigurator:
+    """Customizable IBIS-AMI model parameter configurator.
+
+    This class can be configured to present a customized GUI to the user
+    for configuring a particular IBIS-AMI model.
+
+    The intended use model is as follows:
+
+     1. Instantiate this class only once per IBIS-AMI model invocation.
+        When instantiating, provide the unprocessed contents of the AMI
+        file, as a single string. This class will take care of getting
+        that string parsed properly, and report any errors or warnings
+        it encounters, in its ``ami_parsing_errors`` property.
+
+     2. When you want to let the user change the AMI parameter
+        configuration, call the ``open_gui`` member function.
+        (Or, just call the instance as if it were a function.)
+        The instance will then present a GUI to the user,
+        allowing him to modify the values of any *In* or *InOut* parameters.
+        The resultant AMI parameter dictionary, suitable for passing
+        into the ``ami_params`` parameter of the ``AMIModelInitializer``
+        constructor, can be accessed, via the instance's
+        ``input_ami_params`` property. The latest user selections will be
+        remembered, as long as the instance remains in scope.
+
+    The entire AMI parameter definition dictionary, which should *not* be
+    passed to the ``AMIModelInitializer`` constructor, is available in the
+    instance's ``ami_param_defs`` property.
+
+    Any errors or warnings encountered while parsing are available, in
+    the ``ami_parsing_errors`` property.
+    """
+
+    def __init__(self, ami_file_contents_str: str) -> None:
+        """
+        Args:
+            ami_file_contents_str: The unprocessed contents of the AMI file, as a single string.
+        """
+
+        # Parse the AMI file contents, storing any errors or warnings, and customize the view accordingly.
+        (err_str, root_name, description, reserved_param_dict, model_specific_dict) = parse_ami_string(
+            ami_file_contents_str
+        )
+        if not reserved_param_dict:
+            raise ValueError("\n".join(["No 'Reserved_Parameters' section found!", err_str]))
+        if not model_specific_dict:
+            raise ValueError("\n".join(["No 'Model_Specific' section found!", err_str]))
+        self._root_name: str = root_name
+        self._ami_parsing_errors: str = err_str
+        self._reserved_param_dict: dict[str, ReservedParamDict] = reserved_param_dict
+        self._model_specific_dict: dict[str, ModelSpecificDict] = model_specific_dict
+        self._description: str = description
+
+    @classmethod
+    def from_file(cls, filepath: Path | str):
+        """Create an AMIParamConfigurator from an AMI file."""
+        logger.info("AMIParamConfigurator initializing from %s...", filepath)
+        with open(filepath, "r", encoding="utf-8") as ami_file:
+            ami_string = ami_file.read()
+        return cls(ami_string)
+
+    def gui(self, get_handle: bool = False) -> "AMIParameterDialog | None":
+        """Present a customized GUI to the user, for parameter customization.
+
+        Note: This requires PySide6 to be installed. It should have been installed when you installed pyibisami or
+        you can install it with `pip install PySide6`.
+
+        Args:
+            get_handle (bool): If True, return the handle to the GUI without opening the Dialog.
+
+        Returns:
+            AMIParameterDialog | None: The handle to the GUI or None if the GUI is not opened.
+        """
+        # Local imports since the GUI is optional.
+        from PySide6.QtWidgets import QDialog
+
+        from pyibisami.ami.gui import AMIParameterDialog
+
+        gui = AMIParameterDialog(self._root_name, self.ami_param_defs)
+        if get_handle:  # Used for testing so we can get the handle to the GUI without opening the Dialog.
+            return gui
+
+        result = gui.exec()
+        if result == QDialog.DialogCode.Accepted:
+            values, param_map = gui.get_values()
+            self.update_params_from_gui(values, param_map)
+        return None
+
+    def update_params_from_gui(self, values: dict, param_map: dict):
+        """Update AMIParameter.pvalue fields from a flat dict of values from the GUI using param_map."""
+        for name, value in values.items():
+            param = param_map.get(name)
+            if param is not None:
+                param.current_value = value
+
+    @property
+    def ts4file(self):
+        """The TS4 file name."""
+        return self.fetch_param_val(["Reserved_Parameters", "Ts4file"])
+
+    @property
+    def getwave_exists(self) -> bool:
+        """True if the AMI file has a GetWave function."""
+        return self.fetch_param_val(["Reserved_Parameters", "GetWave_Exists"])
+
+    @property
+    def returns_impulse(self) -> bool:
+        """True if the AMI file returns an impulse response."""
+        return self.fetch_param_val(["Reserved_Parameters", "Init_Returns_Impulse"])
+
+    def fetch_param(self, branch_names):
+        """Returns the parameter found by traversing 'branch_names' or None if not found.
+
+        Note: 'branch_names' should *not* begin with 'root_name'.
+        """
+        param_dict = self.ami_param_defs
+        while branch_names:
+            branch_name = branch_names.pop(0)
+            if branch_name in param_dict:
+                param_dict = param_dict[branch_name]
+            else:
+                return None
+        if isinstance(param_dict, AMIParameter):
+            return param_dict
+        return None
+
+    def fetch_param_val(self, branch_names):
+        """Returns the value of the parameter found by traversing 'branch_names' or None if not found.
+
+        Note: 'branch_names' should *not* begin with 'root_name'.
+        """
+        _param = self.fetch_param(branch_names)
+        if _param:
+            return _param.pvalue
+        return None
+
+    def set_param_val(self, branch_names, new_val):
+        """Sets the value of the parameter found by traversing 'branch_names' or raises an exception if not found.
+
+        Note: 'branch_names' should *not* begin with 'root_name'.
+        Note: Be careful! There is no checking done here!
+        """
+
+        param_dict = self.ami_param_defs
+        while branch_names:
+            branch_name = branch_names.pop(0)
+            if branch_name in param_dict:
+                param_dict = param_dict[branch_name]
+            else:
+                raise ValueError(
+                    f"Failed parameter tree search looking for: {branch_name}; available keys: {param_dict.keys()}"
+                )
+        if isinstance(param_dict, AMIParameter):
+            param_dict.pvalue = new_val
+            try:
+                eval(f"self.set({branch_name}_={new_val})")  # pylint: disable=eval-used
+            except Exception:  # pylint: disable=broad-exception-caught
+                eval(f"self.set({branch_name}={new_val})")  # pylint: disable=eval-used
+        else:
+            raise TypeError(f"{param_dict} is not of type: AMIParameter!")
+
+    @property
+    def ami_parsing_errors(self):
+        """Any errors or warnings encountered, while parsing the AMI parameter definition file contents."""
+        return self._ami_parsing_errors
+
+    @property
+    def ami_param_defs(self) -> dict[str, ReservedParamDict | ModelSpecificDict]:
+        """The entire AMI parameter definition dictionary.
+
+        Should *not* be passed to ``AMIModelInitializer`` constructor!
+        """
+        return {"Reserved_Parameters": self._reserved_param_dict, "Model_Specific": self._model_specific_dict}
+
+    @property
+    def input_ami_params(self) -> ParamValues:
+        """The dictionary of *Model Specific* AMI parameters of type 'In' or 'InOut', along with their user selected
+        values.
+
+        Should be passed to ``AMIModelInitializer`` constructor.
+        """
+
+        res: ParamValues = {}
+        res[ParamName("root_name")] = str(self._root_name)
+        params = self._model_specific_dict
+        for pname in params:
+            res.update(self.input_ami_param(params, pname))
+        return res
+
+    def input_ami_param(self, params: Parameters, pname: ParamName, prefix: str = "") -> ParamValues:
+        """Retrieve one AMI parameter value, or dictionary of subparameter values, from the given parameter definition
+        dictionary.
+
+        Args:
+            params: The parameter definition dictionary.
+            pname: The simple name of the parameter of interest, used by the IBIS-AMI model.
+
+        Keyword Args:
+            prefix: The current working parameter name prefix.
+
+        Returns:
+            A dictionary of parameter values indexed by non-prefixed parameter names.
+
+        Notes:
+            1. The "prefix" referred to above refers to a string encoding of the
+            hierarchy above a particular trait. We need this hierarchy for the
+            sake of the ``Traits/UI`` machinery, which addresses traits by name
+            alone. However, the IBIS-AMI model is not expecting it. So, we have
+            to strip it off, before sending the result here into ``AMI_Init()``.
+        """
+        res = {}
+        param = params[pname]
+
+        if isinstance(param, AMIParameter):
+            if param.pusage in ("In", "InOut"):
+                res[pname] = param.current_value
+        elif isinstance(param, dict):
+            # Handle nested parameters
+            subs = {}
+            for sname in param:
+                subs.update(self.input_ami_param(param, sname, prefix=pname + "_"))
+            res[pname] = subs
+
+        return res
+
+    @property
+    def info_ami_params(self):
+        "Dictionary of *Reserved* AMI parameter values."
+        return self._reserved_param_dict
+
+    def get_init(
+        self,
+        bit_time: float,
+        sample_interval: float,
+        channel_response: NDArray[np.longdouble],
+        ami_params: Optional[dict[str, Any]] = None,
+    ) -> AMIModelInitializer:
+        """Get a model initializer, configured by the user if necessary."""
+
+        row_size = len(channel_response)
+        if ami_params:
+            initializer = AMIModelInitializer(
+                ami_params,
+                info_params=self.info_ami_params,
+                bit_time=c_double(bit_time),
+                row_size=row_size,
+                sample_interval=c_double(sample_interval),
+            )
+        else:
+            # This call will invoke a GUI applet for the user to interact with,
+            # to configure the AMI parameter values.
+            self.gui()
+            initializer = AMIModelInitializer(
+                self.input_ami_params,
+                info_params=self.info_ami_params,
+                bit_time=c_double(bit_time),
+                row_size=row_size,
+                sample_interval=c_double(sample_interval),
+            )
+
+        # Don't try to pack this into the parentheses above!
+        initializer.channel_response = channel_response
+        return initializer

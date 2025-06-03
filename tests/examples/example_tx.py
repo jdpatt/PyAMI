@@ -1,7 +1,6 @@
 #! /usr/bin/env python
 
-"""
-Model configurator for ibisami example Tx model.  This is used in conjunction with ami_config.
+"""Model configurator for ibisami example Tx model.  This is used in conjunction with ami_config.
 
 Original author: David Banas
 Original date:   August 19, 2015

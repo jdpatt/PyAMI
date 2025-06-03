@@ -5,3 +5,4 @@ include src/pyibisami/ami/generic.ami.em
 include src/pyibisami/ami/generic.ibs.em
 recursive-include docs/source *
 recursive-include examples *
+global-include *.typed

@@ -1,5 +1,4 @@
-"""
-IBIS-AMI reserved parameter names, as a Python ``dataclass``.
+"""IBIS-AMI reserved parameter names.
 
 Original author: David Banas <capn.freako@gmail.com>
 
@@ -7,22 +6,6 @@ Original date:   March 17, 2025
 
 Copyright (c) 2025 David Banas; all rights reserved World wide.
 """
-
-from dataclasses import dataclass
-
-
-@dataclass
-class AmiReservedParameterName():
-    "IBIS-AMI Reserved Parameter Name"
-
-    pname: str
-
-    def __post_init__(self):
-        "Validate parameter name."
-
-        if self.pname not in RESERVED_PARAM_NAMES:
-            raise ValueError(f"Parameter name: {self.pname}, is not an IBIS-AMI reserved parameter name!")
-
 
 RESERVED_PARAM_NAMES = [
     "AMI_Version",

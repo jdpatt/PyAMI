@@ -12,9 +12,10 @@ Copyright (c) 2012 by David Banas; All rights reserved World wide.
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _get_version
 
-from .ibis import IBISModel
+from pyibisami.ami import AMIModel, AMIModelInitializer, AMIParamConfigurator
+from pyibisami.ibis import IBISModel
 
-__all__ = ["IBISModel"]
+__all__ = ["IBISModel", "AMIParamConfigurator", "AMIModelInitializer", "AMIModel"]
 
 # Set PEP396 version attribute
 try:

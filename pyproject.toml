@@ -41,10 +41,11 @@ classifiers=[
 
 [project.optional-dependencies]
 dev = [
-    "black",
-    "isort",
     "pre-commit",
     "tox",
+    # Tools below are useful for when using VsCode or other IDEs.
+    "black",
+    "isort",
     "pytest",
     "pytest-cov",
     "pytest-xdist",
@@ -95,20 +96,17 @@ disable = [
 [tool.pylint.format]
 max-line-length = 119
 
-[tool.pydocstyle]
-ignore = [
-    "D105", # Missing docstring in magic method
-    "D107", # Missing docstring in __init__
-]
+[tool.docformatter]
+wrap-summaries = 119
+wrap-descriptions = 119
+
 
 [[tool.mypy.overrides]]
 module = [
-    "click.*",
     "em.*",
-    "numpy.*",
     "parsec.*",
     "pyface.*",
-    "scipy.*",
     "skrf.*",
+    "pyqtgraph.*",
 ]
 ignore_missing_imports = true

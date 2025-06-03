@@ -1,14 +1,36 @@
 """Utility functions for pyibisami."""
 
+import builtins
+import logging
+from typing import Any
+
 import numpy as np
 from scipy.linalg import convolution_matrix, lstsq
 
 from pyibisami.common import Rvec
 
+logger = logging.getLogger(__name__)
+
+
+def setattr(obj: object, name: str, value: Any, /) -> None:
+    """Wrapper around builtins.setattr to log the changes from the GUI.
+
+    You can patch setattr in the gui module to see the changes as they are made.
+
+    Example:
+        ```python
+        from pyibisami.utils import setattr
+        import pyibisami.ibis.gui
+        pyibisami.ibis.gui.setattr = setattr
+        ```
+    """
+    # pylint: disable=redefined-builtin
+    builtins.setattr(obj, name, value)
+    logger.debug("Set %s to %s", name, value)
+
 
 def deconv_same(y: Rvec, x: Rvec) -> Rvec:
-    """
-    Deconvolve input from output, to recover filter response, for same length I/O.
+    """Deconvolve input from output, to recover filter response, for same length I/O.
 
     Args:
         y: output signal
@@ -23,8 +45,7 @@ def deconv_same(y: Rvec, x: Rvec) -> Rvec:
 
 
 def loadWave(filename: str) -> tuple[Rvec, Rvec]:
-    """
-    Load a waveform file.
+    """Load a waveform file.
 
     The file should consist of any number of lines, where each line
     contains, first, a time value and, second, a voltage value.
@@ -52,9 +73,7 @@ def loadWave(filename: str) -> tuple[Rvec, Rvec]:
 
 
 def interpFile(filename: str, sample_per: float) -> Rvec:
-    """
-    Read in a waveform from a file, and convert it to the given sample rate,
-    using linear interpolation.
+    """Read in a waveform from a file, and convert it to the given sample rate, using linear interpolation.
 
     Args:
         filename: Name of waveform file to read in.

@@ -98,8 +98,8 @@ class Component:
 class Model:
     """Encapsulation of a particular I/O model from an IBIS model file.
 
-    Depending on the model type, some of the attributes may be None since only some are required
-    depending on the which ones are set.
+    Depending on the model type, some of the attributes may be None since only some are required depending on the which
+    ones are set.
     """
 
     # pylint: disable=too-many-instance-attributes
@@ -128,7 +128,7 @@ class Model:
     def __post_init__(self):
         """Generate the plot data and get the appropriate AMI and DLL files based off the user operating system."""
         self._plot_data = self.__process_model()
-        self._ami_file, self._dll_file = self.get_algorithmic_model_for_operating_system(self.algorithmic_model)
+        self._dll_file, self._ami_file = self.get_algorithmic_model_for_operating_system(self.algorithmic_model)
 
     @classmethod
     def from_dict(cls, name: str, model: dict):
@@ -249,8 +249,11 @@ class Model:
         return self._dll_file
 
     @staticmethod
-    def get_algorithmic_model_for_operating_system(algorithmic_model: dict[str, list[str]]) -> tuple[str, str]:
-        """Based off the operating system, return the appropriate algorithmic model and DLL/SO and AMI file as Path objects."""
+    def get_algorithmic_model_for_operating_system(
+        algorithmic_model: tuple[tuple[str, str], list[str]],
+    ) -> tuple[str, str] | tuple[None, None]:
+        """Based off the operating system, return the appropriate algorithmic model and DLL/SO and AMI file as Path
+        objects."""
 
         if algorithmic_model:
             os_name = platform.system().lower()  # 'windows', 'linux', etc.
