@@ -684,17 +684,14 @@ class AMIParamConfigurator:
             if param is not None:
                 param.current_value = value
 
-    @property
     def ts4file(self):
         """The TS4 file name."""
         return self.fetch_param_val(["Reserved_Parameters", "Ts4file"])
 
-    @property
     def getwave_exists(self) -> bool:
         """True if the AMI file has a GetWave function."""
         return self.fetch_param_val(["Reserved_Parameters", "GetWave_Exists"])
 
-    @property
     def returns_impulse(self) -> bool:
         """True if the AMI file returns an impulse response."""
         return self.fetch_param_val(["Reserved_Parameters", "Init_Returns_Impulse"])
