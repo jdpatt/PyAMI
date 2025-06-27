@@ -28,7 +28,7 @@ def get_ami_files():
 
 @pytest.mark.skipif(not get_ami_files(), reason="Either PYIBISAMI_TEST_DIR is not set or no AMI files were found")
 @pytest.mark.parametrize("ami_file", get_ami_files())
-def test_external_ami_file_parsing(qtbot, ami_file):
+def test_external_ami_file_parsing(qapp, ami_file):
     """Test AMI file parsing."""
     ami_file = Path(ami_file)  # Turn it back into a filepath after pytest collection.
     errors, root_name, description, reserved_params, model_specific_params = parse_ami_file(ami_file)
