@@ -21,7 +21,7 @@ from traitsui.api import Group, HGroup, Item, VGroup, View
 from traitsui.menu import ModalButtons
 
 from .model                     import AMIModelInitializer
-from .parameter                 import AMIParamError, AMIParameter
+from .parameter                 import AmiParamTuner, AMIParamError, AMIParameter
 from .reserved_parameter_names  import AmiReservedParameterName, RESERVED_PARAM_NAMES
 
 # New types and aliases.
@@ -195,8 +195,14 @@ class AMIParamConfigurator(HasTraits):
         """
 
         param_dict = self.ami_param_defs
+        tname_parts: list[str] = []  # Fully hierarchical trait name, minus the root key.
+        root_key: Optional[str] = None
         while branch_names:
             branch_name = branch_names.pop(0)
+            if root_key is None:
+                root_key = branch_name  # "Reserved_Parameters" or "Model_Specific"; not part of the trait name.
+            else:
+                tname_parts.append(branch_name)
             if branch_name in param_dict:
                 param_dict = param_dict[branch_name]
             else:
@@ -204,13 +210,90 @@ class AMIParamConfigurator(HasTraits):
                     f"Failed parameter tree search looking for: {branch_name}; available keys: {param_dict.keys()}"
                 )
         if isinstance(param_dict, AMIParameter):
-            param_dict.pvalue = new_val
-            try:
-                eval(f"self.set({branch_name}_={new_val})")  # pylint: disable=eval-used
-            except Exception:  # pylint: disable=broad-exception-caught
-                eval(f"self.set({branch_name}={new_val})")  # pylint: disable=eval-used
+            # Coerce to the parameter's declared type. Notably: a `Bool` trait rejects a
+            # float outright, and a vendor's AMI_Init() parser may choke on "1.0" where an
+            # Integer-typed value (e.g. a List-format mode selector) is expected.
+            if param_dict.ptype == "Boolean":
+                if not isinstance(new_val, bool):
+                    if isinstance(new_val, str):
+                        match new_val:
+                            case "FALSE" | "False" | "false":
+                                new_val = False
+                            case _:
+                                new_val = bool(new_val)
+                    else:
+                        new_val = bool(new_val)
+            elif param_dict.ptype in ("Integer", "Tap"):
+                new_val = int(new_val)
+            # `pvalue`, for 'List' format, holds the list of *legal* values, not the
+            # current one (that lives on the Trait) -- leave it alone, to avoid corrupting it.
+            if param_dict.pformat != "List":
+                param_dict.pvalue = new_val
+            tname = "_".join(tname_parts)
+            if tname:
+                try:
+                    self.trait_set(**{f"{tname}_": new_val})
+                except Exception:  # pylint: disable=broad-exception-caught
+                    self.trait_set(**{tname: new_val})
         else:
             raise TypeError(f"{param_dict} is not of type: AMIParameter!")
+
+    @property
+    def tunable_params(self) -> list[tuple[list[str], "AMIParameter"]]:
+        """Every *Model Specific* parameter of type 'In' or 'InOut' that is a
+        candidate for automated sweeping/optimization, paired with its fully
+        hierarchical branch name path. This includes:
+
+            - numeric 'Range'-format parameters (real min/max bounds),
+            - 'Boolean' parameters (True/False), and
+            - 'List'-format 'Integer' parameters whose legal values form a
+              contiguous range (e.g. a mode selector like `(List 0 1)`) --
+              this is deliberately conservative: a non-contiguous legal set
+              (e.g. `(List 6 12 18)`) can't be swept with a uniform step
+              without risking illegal intermediate values, so it's excluded.
+
+        The returned branch name paths are ready to pass directly into
+        ``fetch_param_val()``/``set_param_val()`` (i.e. - they are rooted at
+        ``"Model_Specific"``).
+        """
+        return _walk_tunable_params(self._model_specific_dict, ["Model_Specific"])
+
+    def mk_tap_tuners(self) -> list[AmiParamTuner]:
+        """Build a fresh list of `AmiParamTuner`s from this AMI model's tunable
+        Model_Specific parameters (see `tunable_params` for exactly which ones
+        qualify: Range-format, Boolean, and contiguous Integer/List "mode
+        selector" parameters)."""
+        tuners = []
+        for branch_names, param in self.tunable_params:
+            tname = "_".join(branch_names[1:])  # Drop the "Model_Specific" root.
+            if param.pformat == "Range":
+                pmin, pmax = float(param.pmin), float(param.pmax)
+                step = (pmax - pmin) / 10 or 1.0
+                is_int = param.ptype == "Integer"
+                value = float(param.pvalue)
+            elif param.pformat == "Value" and param.ptype == "Boolean":
+                pmin, pmax, step, is_int = 0.0, 1.0, 1.0, True
+                value = float(param.pvalue)
+            else:  # List-format Integer "mode selector" (contiguous legal values).
+                vals = [float(v) for v in param.pvalue]
+                pmin, pmax, step, is_int = min(vals), max(vals), 1.0, True
+                # `pvalue`, for 'List' format, is the list of *legal* values, not the
+                # current one -- that lives on the Trait `make_gui_items()` registered.
+                try:
+                    value = float(self.trait_get(tname + "_")[tname + "_"])
+                except Exception:  # pylint: disable=broad-exception-caught
+                    value = float(self.trait_get(tname)[tname])
+            tuners.append(AmiParamTuner(
+                name=tname,
+                branch_names=branch_names,
+                enabled=False,
+                min_val=pmin,
+                max_val=pmax,
+                step=step,
+                value=value,
+                is_int=is_int,
+            ))
+        return tuners
 
     @property
     def ami_parsing_errors(self) -> list[str]:
@@ -286,7 +369,7 @@ class AMIParamConfigurator(HasTraits):
         elif isinstance(param, dict):  # We received a dictionary of subparameters, in 'param'.
             subs: ParamValues = {}
             for sname in param:
-                subs.update(self.input_ami_param(param, sname, prefix=pname + "_"))  # type: ignore
+                subs.update(self.input_ami_param(param, sname, prefix=tname + "_"))  # type: ignore
             res[pname] = subs
         return res
 
@@ -330,6 +413,47 @@ class AMIParamConfigurator(HasTraits):
         # Don't try to pack this into the parentheses above!
         initializer.channel_response = channel_response
         return initializer
+
+
+def _is_sweepable(param: "AMIParameter") -> bool:
+    "See `AMIParamConfigurator.tunable_params` for the exact criteria."
+    if param.pusage not in ("In", "InOut"):
+        return False
+    if param.pformat == "Range":
+        return True
+    if param.pformat == "Value" and param.ptype == "Boolean":
+        return True
+    if param.pformat == "List" and param.ptype == "Integer":
+        vals = sorted(int(v) for v in param.pvalue)
+        return vals == list(range(vals[0], vals[-1] + 1))  # Contiguous?
+    return False
+
+
+def _walk_tunable_params(
+    params: Parameters, prefix: list[str]
+) -> list[tuple[list[str], "AMIParameter"]]:
+    """Recursively collect every sweepable (see `_is_sweepable`) leaf of a
+    *Model Specific* parameter (sub)tree.
+
+    Args:
+        params: The (sub)dictionary of AMI parameters to walk.
+        prefix: The branch name path leading to ``params``.
+
+    Returns:
+        A list of (branch name path, parameter) pairs, one per sweepable leaf.
+    """
+
+    results: list[tuple[list[str], "AMIParameter"]] = []
+    for pname, param in params.items():
+        if pname == "description":  # A branch's optional descriptive text, not a subparameter.
+            continue
+        path = prefix + [pname]
+        if isinstance(param, AMIParameter):
+            if _is_sweepable(param):
+                results.append((path, param))
+        else:  # Subparameter branch.
+            results.extend(_walk_tunable_params(param, path))
+    return results
 
 
 #####
