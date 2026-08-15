@@ -11,7 +11,8 @@ Copyright (C) 2026 David Banas; all rights reserved World wide.
 from abc                import abstractmethod
 from dataclasses        import dataclass
 from pathlib            import Path
-from typing             import Any, Generator, NewType, Optional
+from typing             import Any, NewType, Optional
+from collections.abc    import Generator
 
 import numpy as np
 from scipy.interpolate  import interp1d
@@ -101,7 +102,7 @@ def mk_default_test_sweep_file(
 
     # Import the `*.ibs` file.
     try:
-        ibis = IBISModel(ibis_file, debug=debug, gui=False)
+        ibis = IBISModel(str(ibis_file.resolve()), debug=debug, gui=False)
         dName = ibis_file.parent
         assert ibis.ami_file, RuntimeError(
             "Missing AMI file definition in IBIS file!"
